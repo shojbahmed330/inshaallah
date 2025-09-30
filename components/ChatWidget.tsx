@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { User, Message, AppView, ReplyInfo } from '../types';
 import { firebaseService } from '../services/firebaseService';
@@ -16,6 +15,8 @@ interface ChatWidgetProps {
     onNavigate: (view: AppView, props?: any) => void;
     onSetTtsMessage: (message: string) => void;
     onBlockUser: (user: User) => void;
+    isFullScreen?: boolean;
+    onGoBack?: (peerId: string) => void;
 }
 
 const ChatMessage: React.FC<{ message: Message; isMe: boolean; peerAvatar: string }> = ({ message, isMe, peerAvatar }) => {
@@ -63,10 +64,10 @@ const ChatMessage: React.FC<{ message: Message; isMe: boolean; peerAvatar: strin
 };
 
 const ChatWidget: React.FC<ChatWidgetProps> = (props) => {
-    const { currentUser, peerUser, isMinimized, unreadCount, onClose, onMinimize, onHeaderClick, setIsChatRecording, onNavigate, onBlockUser } = props;
+    const { currentUser, peerUser, isMinimized, unreadCount, onClose, onMinimize, onHeaderClick, setIsChatRecording, onNavigate, onBlockUser, isFullScreen = false, onGoBack } = props;
     const [messages, setMessages] = useState<Message[]>([]);
-    const [newMessage, setNewMessage] = useState('');
     const [isRecording, setIsRecording] = useState(false);
+    const [newMessage, setNewMessage] = useState('');
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -130,24 +131,40 @@ const ChatWidget: React.FC<ChatWidgetProps> = (props) => {
         setIsRecording(false);
     }, []);
 
+    const isOnline = peerUser.onlineStatus === 'online';
 
     if (isMinimized) {
         return (
             <button onClick={() => onHeaderClick(peerUser.id)} className="w-16 h-16 rounded-full shadow-2xl relative pointer-events-auto">
                 <img src={peerUser.avatarUrl} alt={peerUser.name} className="w-full h-full rounded-full" />
                 {unreadCount > 0 && <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-bold text-white border-2 border-slate-900">{unreadCount}</span>}
-                {peerUser.onlineStatus === 'online' && <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-800"></div>}
+                {isOnline && <div className="absolute bottom-0 right-0 w-4 h-4 bg-sky-500 rounded-full border-2 border-slate-800"></div>}
             </button>
         );
     }
     
+    const fullScreenClasses = 'relative w-full h-full rounded-none';
+    const widgetClasses = 'fixed bottom-0 right-4 md:relative w-full md:w-80 md:h-[420px] rounded-t-lg md:rounded-lg';
+    
+    const containerClasses = isFullScreen
+        ? fullScreenClasses
+        : widgetClasses;
+    
     return (
-        <div className="fixed inset-0 md:inset-auto md:relative w-full h-full md:w-80 md:h-96 flex flex-col bg-slate-800/80 backdrop-blur-md border border-fuchsia-500/30 rounded-lg shadow-2xl animate-fade-in-fast pointer-events-auto">
+        <div className={`${containerClasses} flex flex-col bg-slate-800/80 backdrop-blur-md border border-fuchsia-500/30 shadow-2xl animate-fade-in-fast pointer-events-auto`}>
             <header className="flex-shrink-0 flex items-center p-2 border-b border-slate-700/50 cursor-pointer" onClick={() => onHeaderClick(peerUser.id)}>
-                <img src={peerUser.avatarUrl} alt={peerUser.name} className="w-9 h-9 rounded-full"/>
+                 {onGoBack && (
+                    <button onClick={(e) => { e.stopPropagation(); onGoBack(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700 md:hidden">
+                        <Icon name="back" className="w-6 h-6"/>
+                    </button>
+                )}
+                <div className="relative">
+                    <img src={peerUser.avatarUrl} alt={peerUser.name} className="w-9 h-9 rounded-full"/>
+                     {isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-sky-500 rounded-full border-2 border-slate-800"></div>}
+                </div>
                 <div className="ml-2 flex-grow">
                     <p className="font-bold text-slate-100">{peerUser.name}</p>
-                    <p className="text-xs text-slate-400">{peerUser.onlineStatus === 'online' ? 'Online' : 'Offline'}</p>
+                    <p className="text-xs text-slate-400">{isOnline ? 'Online' : 'Offline'}</p>
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); onMinimize(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="close" className="w-5 h-5"/></button>
                 <button onClick={(e) => { e.stopPropagation(); onClose(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="close" className="w-5 h-5"/></button>

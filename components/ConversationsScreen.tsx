@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, Conversation, AppView } from '../types';
 import { firebaseService } from '../services/firebaseService';
 import Icon from './Icon';
@@ -20,59 +20,8 @@ const ConversationRow: React.FC<{
     style: React.CSSProperties;
     className: string;
     onContextMenu: (e: React.MouseEvent) => void;
-}> = ({ convo, onClick, style, className, onContextMenu }) => {
-    const [translateX, setTranslateX] = useState(0);
-    const dragStartX = useRef(0);
-    const isMobile = useIsMobile();
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (!isMobile) return;
-        dragStartX.current = e.clientX;
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
-    };
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        if (!isMobile) return;
-        dragStartX.current = e.touches[0].clientX;
-        window.addEventListener('touchmove', handleTouchMove);
-        window.addEventListener('touchend', handleTouchEnd);
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-        const diff = e.clientX - dragStartX.current;
-        if (diff < 0 && diff > -200) { // Limit swipe distance
-            setTranslateX(diff);
-        }
-    };
-    
-    const handleTouchMove = (e: TouchEvent) => {
-        const diff = e.touches[0].clientX - dragStartX.current;
-         if (diff < 0 && diff > -200) {
-            setTranslateX(diff);
-        }
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-        snapOrReset();
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-        window.removeEventListener('touchmove', handleTouchMove);
-        window.removeEventListener('touchend', handleTouchEnd);
-        snapOrReset();
-    };
-
-    const snapOrReset = () => {
-        if (translateX < -60) {
-            setTranslateX(-180); // Snap open
-        } else {
-            setTranslateX(0); // Reset
-        }
-    };
-
+    isSelected: boolean;
+}> = ({ convo, onClick, style, className, onContextMenu, isSelected }) => {
     const lastMessageText = () => {
         if (!convo.lastMessage) return 'No messages yet.';
         if (convo.lastMessage.isDeleted) return 'Unsent message';
@@ -88,31 +37,27 @@ const ConversationRow: React.FC<{
 
     const isUnread = convo.unreadCount > 0;
     const isOnline = convo.peer.onlineStatus === 'online';
-
-    const ActionButton: React.FC<{ icon: React.ComponentProps<typeof Icon>['name']; bg: string; onClick: () => void }> = ({ icon, bg, onClick }) => (
-        <button onClick={onClick} className={`w-[60px] h-full flex items-center justify-center text-white ${bg}`}>
-            <Icon name={icon} className="w-6 h-6"/>
-        </button>
-    );
+    
+    const bgClasses = useMemo(() => {
+        if (isSelected) {
+            return 'bg-slate-700';
+        }
+        let classes = 'bg-slate-800/50 hover:bg-slate-700/50';
+        if (isUnread) {
+            // Adding a subtle background tint for unread messages as requested in a previous turn.
+            classes += ' bg-fuchsia-500/10';
+        }
+        return classes;
+    }, [isSelected, isUnread]);
 
     return (
-        <div 
-            className={`relative w-full rounded-lg overflow-hidden ${className}`} 
+        <div
+            className={`w-full rounded-lg transition-colors duration-200 ease-out cursor-pointer ${className} ${bgClasses}`}
             style={style}
             onContextMenu={onContextMenu}
+            onClick={onClick}
         >
-             <div className="absolute top-0 right-0 h-full flex z-0">
-                <ActionButton icon="pin" bg="bg-indigo-500" onClick={() => console.log('Pin')} />
-                <ActionButton icon="speaker-x-mark" bg="bg-slate-500" onClick={() => console.log('Mute')} />
-                <ActionButton icon="trash" bg="bg-red-500" onClick={() => console.log('Delete')} />
-            </div>
-            <div
-                className="w-full flex items-center gap-4 p-3 bg-slate-800/50 hover:bg-slate-700/50 relative z-10 transition-transform duration-200 ease-out"
-                style={{ transform: `translateX(${translateX}px)` }}
-                onMouseDown={handleMouseDown}
-                onTouchStart={handleTouchStart}
-                onClick={translateX === 0 ? onClick : () => setTranslateX(0)}
-            >
+            <div className="w-full flex items-center gap-4 p-3 relative z-10">
                 <div className="relative">
                     <img src={convo.peer.avatarUrl} alt={convo.peer.name} className="w-16 h-16 rounded-full" />
                     {isOnline && (
@@ -225,6 +170,7 @@ const ConversationsScreen: React.FC<ConversationsScreenProps> = ({ currentUser, 
                                 onContextMenu={(e) => handleContextMenu(e, convo)}
                                 style={{ animationDelay: `${index * 50}ms` }}
                                 className={`animate-fade-slide-in ${glowingItems.has(convo.peer.id) ? 'animate-glow-pulse' : ''}`}
+                                isSelected={!isMobile && selectedConvo?.peer.id === convo.peer.id}
                             />
                         ))}
                     </div>
@@ -250,6 +196,14 @@ const ConversationsScreen: React.FC<ConversationsScreenProps> = ({ currentUser, 
                                 onGoBack={() => setSelectedConvo(null)}
                                 isFullScreen={true}
                                 onNavigate={onNavigate}
+                                onMinimize={() => {}}
+                                onClose={() => setSelectedConvo(null)}
+                                onHeaderClick={() => {}}
+                                isMinimized={false}
+                                unreadCount={0}
+                                setIsChatRecording={() => {}}
+                                onSetTtsMessage={() => {}}
+                                onBlockUser={() => {}}
                             />
                          </div>
                     ) : (
