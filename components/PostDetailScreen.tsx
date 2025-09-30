@@ -22,13 +22,13 @@ interface PostDetailScreenProps {
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post) => void;
+  onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   scrollState: ScrollState;
   onCommandProcessed: () => void;
   onGoBack: () => void;
-  onStartComment: (postId: string, commentToReplyTo?: Comment) => void;
 }
 
-const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onStartComment }) => {
+const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments }) => {
   const [post, setPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -189,7 +189,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
                       isPlaying={playingCommentId === comment.id}
                       onPlayPause={() => handlePlayComment(comment)}
                       onAuthorClick={onOpenProfile}
-                      onReply={setReplyingTo}
+                      onReply={(c) => onOpenComments(post, c)}
                       onReact={(commentId, emoji) => onReactToComment(post.id, commentId, emoji)}
                       onEdit={(commentId, newText) => onEditComment(post.id, commentId, newText)}
                       onDelete={(commentId) => onDeleteComment(post.id, commentId)}
@@ -230,11 +230,10 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
           isPlaying={isPlaying}
           onPlayPause={() => setIsPlaying(p => !p)}
           onReact={onReactToPost}
-          onViewPost={() => {}}
+          onOpenComments={onOpenComments}
           onAuthorClick={onOpenProfile}
           onSharePost={onSharePost}
           onOpenPhotoViewer={onOpenPhotoViewer}
-          onStartComment={onStartComment}
         />
 
         <div className="bg-slate-800/50 rounded-xl p-4">

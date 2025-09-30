@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Post, User, ScrollState, Campaign, AppView, Story, Comment } from '../types';
 import { PostCard } from './PostCard';
@@ -18,13 +17,12 @@ interface FeedScreenProps {
   onSetTtsMessage: (message: string) => void;
   lastCommand: string | null;
   onOpenProfile: (userName: string) => void;
-  onViewPost: (postId: string) => void;
+  onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   onReactToPost: (postId: string, emoji: string) => void;
   onStartCreatePost: (props?: any) => void;
   onRewardedAdClick: (campaign: Campaign) => void;
   onAdViewed: (campaignId: string) => void;
   onAdClick: (post: Post) => void;
-  onStartComment: (postId: string, commentToReplyTo?: Comment) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post) => void;
   
@@ -38,9 +36,9 @@ interface FeedScreenProps {
 
 const FeedScreen: React.FC<FeedScreenProps> = ({
     isLoading, posts: initialPosts, currentUser, onSetTtsMessage, lastCommand, onOpenProfile,
-    onViewPost, onReactToPost, onStartCreatePost, onRewardedAdClick, onAdViewed,
+    onOpenComments, onReactToPost, onStartCreatePost, onRewardedAdClick, onAdViewed,
     onAdClick, onCommandProcessed, scrollState, onSetScrollState, onNavigate, friends, setSearchResults,
-    onStartComment, onSharePost, onOpenPhotoViewer
+    onSharePost, onOpenPhotoViewer
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [adInjected, setAdInjected] = useState(false);
@@ -196,12 +194,12 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                 const targetName = slots.target_name as string;
                 const postToView = posts.find(p => !p.isSponsored && p.author.name === targetName);
                 if (postToView) {
-                    onViewPost(postToView.id);
+                    onOpenComments(postToView);
                 } else {
                     onSetTtsMessage(`I can't find a post by ${targetName} to view comments on.`);
                 }
             } else if (currentPostIndex !== -1 && posts[currentPostIndex] && !posts[currentPostIndex].isSponsored) {
-                onViewPost(posts[currentPostIndex].id);
+                onOpenComments(posts[currentPostIndex]);
             }
             break;
           case 'intent_add_text_to_story':
@@ -287,7 +285,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         onCommandProcessed();
     }
   }, [
-      posts, currentPostIndex, friends, onOpenProfile, onReactToPost, onViewPost, onSetTtsMessage, onStartCreatePost, 
+      posts, currentPostIndex, friends, onOpenProfile, onReactToPost, onOpenComments, onSetTtsMessage, onStartCreatePost, 
       onNavigate, onSetScrollState, setSearchResults, onCommandProcessed, fetchRewardedCampaign, onSharePost, language
   ]);
 
@@ -414,10 +412,9 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                         }
                     }}
                     onReact={onReactToPost}
-                    onViewPost={onViewPost}
+                    onOpenComments={onOpenComments}
                     onAuthorClick={onOpenProfile}
                     onAdClick={onAdClick}
-                    onStartComment={onStartComment}
                     onSharePost={onSharePost}
                     onOpenPhotoViewer={onOpenPhotoViewer}
                 />

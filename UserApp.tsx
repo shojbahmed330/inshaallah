@@ -7,7 +7,6 @@ import ExploreScreen from './components/ExploreScreen';
 import ReelsScreen from './components/ReelsScreen';
 import CreatePostScreen from './components/CreatePostScreen';
 import CreateReelScreen from './components/CreateReelScreen';
-import CreateCommentScreen from './components/CreateCommentScreen';
 import { ProfileScreen } from './components/ProfileScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PostDetailScreen from './components/PostDetailScreen';
@@ -48,11 +47,17 @@ import { useSettings } from './contexts/SettingsContext';
 import ChatManager from './components/ChatManager';
 import IncomingCallModal from './components/IncomingCallModal';
 import CallScreen from './components/CallScreen';
+import CommentSheet from './components/CommentSheet';
 
 
 interface ViewState {
   view: AppView;
   props?: any;
+}
+
+interface CommentSheetState {
+    post: Post;
+    commentToReplyTo?: Comment;
 }
 
 const MenuItem: React.FC<{
@@ -180,6 +185,7 @@ const UserApp: React.FC = () => {
   const [chatUnreadCounts, setChatUnreadCounts] = useState<Record<string, number>>({});
   const [isChatRecording, setIsChatRecording] = useState(false);
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
+  const [commentSheetState, setCommentSheetState] = useState<CommentSheetState | null>(null);
   
   const userRef = useRef(user);
   userRef.current = user;
@@ -780,15 +786,10 @@ const UserApp: React.FC = () => {
     }
   };
   
-  const handleCommentPosted = (newComment: Comment | null, postId: string) => {
-    if (newComment === null) {
-        setTtsMessage(getTtsPrompt('comment_suspended', language));
-        goBack();
-        return;
-    }
-    setViewStack(stack => [...stack.slice(0, -1), { view: AppView.POST_DETAILS, props: { postId, newlyAddedCommentId: newComment.id } }]);
-    setTtsMessage(getTtsPrompt('comment_post_success', language));
-  }
+  const handleOpenComments = (post: Post, commentToReplyTo?: Comment) => {
+    handleClosePhotoViewer();
+    setCommentSheetState({ post, commentToReplyTo });
+  };
   
   const handleReactToPost = async (postId: string, emoji: string) => {
     if (!user) return;
@@ -870,15 +871,6 @@ const UserApp: React.FC = () => {
   const handleOpenProfile = (username: string) => navigate(AppView.PROFILE, { username });
   const handleViewPost = (postId: string) => navigate(AppView.POST_DETAILS, { postId });
   const handleEditProfile = () => navigate(AppView.SETTINGS, { ttsMessage: getTtsPrompt('settings_opened', language) });
-  
-  const handleStartComment = (postId: string, commentToReplyTo?: Comment) => {
-    if (user?.commentingSuspendedUntil && new Date(user.commentingSuspendedUntil) > new Date()) {
-        setTtsMessage(getTtsPrompt('comment_suspended', language));
-        return;
-    }
-    handleClosePhotoViewer(); 
-    navigate(AppView.CREATE_COMMENT, { postId, commentToReplyTo });
-  };
   
   const handleBlockUser = async (userToBlock: User) => {
       if (!user) return;
@@ -974,7 +966,7 @@ const UserApp: React.FC = () => {
       onGoBack: goBack,
       onNavigate: navigate,
       onOpenProfile: handleOpenProfile,
-      onStartComment: handleStartComment,
+      onOpenComments: handleOpenComments,
       onSharePost: handleSharePost,
       onOpenPhotoViewer: handleOpenPhotoViewer,
     };
@@ -988,17 +980,15 @@ const UserApp: React.FC = () => {
             initialAuthError={globalAuthError}
         />;
       case AppView.FEED:
-        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} onViewPost={handleViewPost} friends={friends} setSearchResults={setSearchResults} />;
+        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} />;
       case AppView.EXPLORE:
-        return <ExploreScreen {...commonScreenProps} onReactToPost={handleReactToPost} onViewPost={handleViewPost} />;
+        return <ExploreScreen {...commonScreenProps} onReactToPost={handleReactToPost} />;
       case AppView.REELS:
-        return <ReelsScreen {...commonScreenProps} isLoading={isLoadingReels} posts={reelsPosts} onReactToPost={handleReactToPost} onViewPost={handleViewPost} />;
+        return <ReelsScreen {...commonScreenProps} isLoading={isLoadingReels} posts={reelsPosts} onReactToPost={handleReactToPost} />;
       case AppView.CREATE_POST:
         return <CreatePostScreen {...commonScreenProps} onPostCreated={handlePostCreated} onDeductCoinsForImage={handleDeductCoinsForImage} {...currentView.props} />;
       case AppView.CREATE_REEL:
         return <CreateReelScreen {...commonScreenProps} onReelCreated={handleReelCreated} />;
-      case AppView.CREATE_COMMENT:
-        return <CreateCommentScreen {...commonScreenProps} user={user} onCommentPosted={handleCommentPosted} {...currentView.props} />;
       case AppView.PROFILE:
         return <ProfileScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} onEditProfile={handleEditProfile} onBlockUser={handleBlockUser} onCurrentUserUpdate={handleCurrentUserUpdate} onPostCreated={handlePostCreated} {...currentView.props} />;
       case AppView.SETTINGS:
@@ -1048,7 +1038,7 @@ const UserApp: React.FC = () => {
       case AppView.MOBILE_MENU:
         return <MobileMenuScreen currentUser={user} onNavigate={navigate} onLogout={handleLogout} friendRequestCount={friendRequestCount} />;
       default:
-        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} onViewPost={handleViewPost} friends={friends} setSearchResults={setSearchResults} />;
+        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} />;
     }
   };
   
@@ -1231,6 +1221,23 @@ const UserApp: React.FC = () => {
               onAccept={handleAcceptCall}
               onReject={handleRejectCall}
           />
+      )}
+      {commentSheetState && (
+        <CommentSheet
+            key={commentSheetState.post.id}
+            initialPost={commentSheetState.post}
+            commentToReplyTo={commentSheetState.commentToReplyTo}
+            currentUser={user}
+            onClose={() => setCommentSheetState(null)}
+            onReactToPost={handleReactToPost}
+            onReactToComment={handleReactToComment}
+            onPostComment={handlePostComment}
+            onEditComment={handleEditComment}
+            onDeleteComment={handleDeleteComment}
+            onOpenProfile={handleOpenProfile}
+            onSharePost={handleSharePost}
+            onOpenPhotoViewer={handleOpenPhotoViewer}
+        />
       )}
       {!isFullScreenView && (
         <MobileBottomNav 

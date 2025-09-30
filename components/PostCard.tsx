@@ -14,9 +14,8 @@ interface PostCardProps {
   isPlaying: boolean;
   onPlayPause: () => void;
   onReact: (postId: string, emoji: string) => void;
-  onViewPost: (postId: string) => void;
+  onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   onAuthorClick: (username: string) => void;
-  onStartComment: (postId: string, commentToReplyTo?: Comment) => void;
   onSharePost?: (post: Post) => void;
   onAdClick?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
@@ -39,7 +38,7 @@ const REACTION_COLORS: { [key: string]: string } = {
     '😡': 'text-orange-500',
 };
 
-export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onViewPost, onAuthorClick, onStartComment, onSharePost, onAdClick, onDeletePost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onOpenComments, onAuthorClick, onSharePost, onAdClick, onDeletePost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote }) => {
   // FINAL FIX: Add a guard clause for the post and its author.
   if (!post || !post.author) {
     return null;
@@ -159,7 +158,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
       if (post.audioUrl) {
         onPlayPause();
       } else {
-        onViewPost(post.id);
+        onOpenComments(post);
       }
   }
 
@@ -439,7 +438,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
                   )}
                   <span className="text-sm text-fuchsia-500 ml-2 hover:underline">{reactionCount}</span>
               </button>
-              <button onClick={() => onViewPost(post.id)} className="text-sm text-fuchsia-500 hover:underline">{post.commentCount || 0} comments</button>
+              <button onClick={() => onOpenComments(post)} className="text-sm text-fuchsia-500 hover:underline">{post.commentCount || 0} comments</button>
           </div>
         )}
 
@@ -478,7 +477,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
                           <span className="font-semibold text-base">React</span>
                       </button>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); onStartComment(post.id); }} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200">
+                  <button onClick={(e) => { e.stopPropagation(); onOpenComments(post); }} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200">
                     <Icon name="comment" className="w-6 h-6" />
                     <span className="font-semibold text-base">Comment</span>
                   </button>

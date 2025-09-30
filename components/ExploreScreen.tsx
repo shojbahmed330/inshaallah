@@ -8,9 +8,8 @@ import PostCarousel from './PostCarousel';
 interface ExploreScreenProps {
   currentUser: User;
   onReactToPost: (postId: string, emoji: string) => void;
-  onViewPost: (postId: string) => void;
+  onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   onOpenProfile: (userName: string) => void;
-  onStartComment: (postId: string, commentToReplyTo?: Comment) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post) => void;
 }
@@ -42,9 +41,8 @@ const SkeletonCarousel: React.FC<{ title: string }> = ({ title }) => (
 const ExploreScreen: React.FC<ExploreScreenProps> = ({
   currentUser,
   onReactToPost,
-  onViewPost,
+  onOpenComments,
   onOpenProfile,
-  onStartComment,
   onSharePost,
   onOpenPhotoViewer,
 }) => {
@@ -73,9 +71,8 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
     const commonPostCardProps = {
         currentUser,
         onReact: onReactToPost,
-        onViewPost,
+        onOpenComments,
         onAuthorClick: onOpenProfile,
-        onStartComment,
         onSharePost,
         onOpenPhotoViewer,
         isActive: false,

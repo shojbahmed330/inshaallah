@@ -18,7 +18,7 @@ interface ProfileScreenProps {
   lastCommand: string | null;
   onOpenConversation: (recipient: User) => void;
   onEditProfile: () => void;
-  onViewPost: (postId: string) => void;
+  onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   onOpenProfile: (username: string) => void;
   onReactToPost: (postId: string, emoji: string) => void;
   onBlockUser: (user: User) => void;
@@ -32,7 +32,6 @@ interface ProfileScreenProps {
   onSetScrollState: (state: ScrollState) => void;
   onNavigate: (view: AppView, props?: any) => void;
   onGoBack: () => void;
-  onStartComment: (postId: string, commentToReplyTo?: Comment) => void;
 }
 
 const formatTimeAgo = (isoString?: string): string => {
@@ -61,10 +60,10 @@ const AboutItem: React.FC<{iconName: React.ComponentProps<typeof Icon>['name'], 
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ 
     username, currentUser, onSetTtsMessage, lastCommand, onOpenConversation, 
-    onEditProfile, onViewPost, onOpenProfile, onReactToPost, onBlockUser, scrollState,
+    onEditProfile, onOpenComments, onOpenProfile, onReactToPost, onBlockUser, scrollState,
     onCommandProcessed, onSetScrollState, onNavigate, onGoBack,
     onCurrentUserUpdate, onPostCreated,
-    onStartComment, onSharePost, onOpenPhotoViewer
+    onSharePost, onOpenPhotoViewer
 }) => {
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -208,9 +207,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     };
   }, [scrollState]);
   
-  const handleComment = () => {
+  const handleComment = (post: Post) => {
      if (posts.length > 0) {
-        onViewPost(posts[currentPostIndex].id);
+        onOpenComments(post);
      }
   }
 
@@ -233,9 +232,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       event.target.value = ''; 
   };
   
-// FIX: The `onSave` prop for `ImageCropper` expects a function with one argument `(base64: string)`.
-// The original `handleSaveCrop` expected a `caption` and `captionStyle`, causing a type mismatch.
-// This has been updated to only accept `base64Url` and pass undefined for the optional caption.
   const handleSaveCrop = async (base64Url: string) => {
       if (!profileUser || !cropperState.type) return;
 
@@ -622,9 +618,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                             }
                                         }}
                                         onReact={onReactToPost}
-                                        onViewPost={onViewPost}
+                                        onOpenComments={onOpenComments}
                                         onAuthorClick={onOpenProfile}
-                                        onStartComment={onStartComment}
                                         onSharePost={onSharePost}
                                         onOpenPhotoViewer={onOpenPhotoViewer}
                                     />
