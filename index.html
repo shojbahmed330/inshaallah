@@ -221,6 +221,29 @@
       .animate-breathing {
           animation: breathing 3s ease-in-out infinite;
       }
+      
+      /* Animations for Conversation Screen Interactivity */
+      @keyframes fade-scale-in {
+        from {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .animate-fade-scale-in {
+        animation: fade-scale-in 0.1s ease-out forwards;
+      }
+      @keyframes bounce-in {
+        0% { transform: scale(0.5) translateX(20px); opacity: 0; }
+        60% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1) translateX(0); }
+      }
+      .animate-bounce-in {
+        animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
     </style>
     
   <script type="importmap">
