@@ -135,7 +135,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center items-end animate-fade-in-fast" onClick={handleClose}>
       <div 
-        className={`bg-slate-900 w-full max-w-2xl h-[90vh] rounded-t-2xl flex flex-col ${isClosing ? 'animate-slide-out-to-bottom' : 'animate-slide-in-from-bottom'}`}
+        className={`bg-slate-900 w-full max-w-2xl h-[68vh] rounded-t-2xl flex flex-col ${isClosing ? 'animate-slide-out-to-bottom' : 'animate-slide-in-from-bottom'}`}
         onClick={e => e.stopPropagation()}
       >
         <header className="flex-shrink-0 p-4 border-b border-slate-700/50 flex items-center justify-center relative">
