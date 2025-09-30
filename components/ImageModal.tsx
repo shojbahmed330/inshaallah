@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Post, User, Comment } from '../types';
 import Icon from './Icon';
@@ -18,11 +17,12 @@ interface ImageModalProps {
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
+  onOpenCommentsSheet: (post: Post) => void;
 }
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
-const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, onClose, onReactToPost, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, onClose, onReactToPost, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet }) => {
   if (!post || !post.author) {
     return null;
   }
@@ -35,6 +35,8 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const pickerTimeout = useRef<number | null>(null);
+
+  const isMobile = window.innerWidth < 768;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -152,9 +154,9 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                       onPlayPause={() => handlePlayComment(comment)}
                       onAuthorClick={onOpenProfile}
                       onReply={setReplyingTo}
-                      onReact={(commentId, emoji) => onReactToComment(post.id, commentId, emoji)}
-                      onEdit={(commentId, newText) => onEditComment(post.id, commentId, newText)}
-                      onDelete={(commentId) => onDeleteComment(post.id, commentId)}
+                      onReact={(commentId, emoji) => post && onReactToComment(post.id, commentId, emoji)}
+                      onEdit={(commentId, newText) => post && onEditComment(post.id, commentId, newText)}
+                      onDelete={(commentId) => post && onDeleteComment(post.id, commentId)}
                       isReply={isReply}
                   />
               </div>
@@ -214,7 +216,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
           />
       </main>
 
-      <aside className={`w-full h-1/2 md:h-auto md:w-[380px] flex-shrink-0 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700/50 flex flex-col transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+      <aside className={`w-full h-auto md:h-auto md:w-[380px] flex-shrink-0 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700/50 flex flex-col transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <header className="p-4 border-b border-slate-700">
               <button onClick={() => onOpenProfile(post.author.username)} className="flex items-center gap-3 group">
                 <img src={post.author.avatarUrl} alt={post.author.name} className="w-12 h-12 rounded-full" />
@@ -237,7 +239,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                         )}
                         <span className="text-sm text-lime-500 ml-2 hover:underline">{reactionCount}</span>
                     </button>
-                    <span className="text-sm text-lime-500">{post.commentCount || 0} comments</span>
+                    <button onClick={() => isMobile ? onOpenCommentsSheet(post) : commentInputRef.current?.focus()} className="text-sm text-lime-500 hover:underline">{post.commentCount || 0} comments</button>
                 </div>
               )}
           </div>
@@ -258,7 +260,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                         <span className="font-semibold text-base">React</span>
                     </button>
                 </div>
-               <button onClick={() => commentInputRef.current?.focus()} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 text-lime-400/80">
+               <button onClick={(e) => { e.stopPropagation(); if (isMobile) { onOpenCommentsSheet(post); } else { commentInputRef.current?.focus(); } }} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 text-lime-400/80">
                 <Icon name="comment" className="w-6 h-6" />
                 <span className="font-semibold text-base">Comment</span>
               </button>
@@ -267,42 +269,46 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                 <span className="font-semibold text-base">Share</span>
               </button>
           </div>
+          
+          {!isMobile && (
+              <>
+                <div className="flex-grow overflow-y-auto p-4 space-y-3">
+                    {commentThreads.length > 0 ? commentThreads.map(comment => (
+                        <CommentWithReplies key={comment.id} comment={comment} />
+                    )) : (
+                        <p className="text-center text-slate-500 pt-8">No comments yet.</p>
+                    )}
+                </div>
 
-          <div className="flex-grow overflow-y-auto p-4 space-y-3">
-             {commentThreads.length > 0 ? commentThreads.map(comment => (
-                <CommentWithReplies key={comment.id} comment={comment} />
-            )) : (
-                <p className="text-center text-slate-500 pt-8">No comments yet.</p>
-            )}
-          </div>
-
-          <footer className="p-3 border-t border-slate-700">
-                {replyingTo && (
-                    <div className="text-xs text-slate-400 px-2 pb-2 flex justify-between items-center">
-                        <span>Replying to {replyingTo.author.name}</span>
-                        <button onClick={() => setReplyingTo(null)} className="font-bold">Cancel</button>
-                    </div>
-                )}
-                <form onSubmit={handlePostCommentSubmit} className="flex items-center gap-2">
-                    <img src={currentUser.avatarUrl} alt="Your avatar" className="w-9 h-9 rounded-full" />
-                    <input
-                        ref={commentInputRef}
-                        type="text"
-                        value={newCommentText}
-                        onChange={(e) => setNewCommentText(e.target.value)}
-                        placeholder="Write a comment..."
-                        className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-lime-500 focus:border-lime-500"
-                    />
-                    <button
-                        type="submit"
-                        disabled={isPostingComment || !newCommentText.trim()}
-                        className="p-2.5 rounded-full bg-lime-600 text-black hover:bg-lime-500 disabled:bg-slate-500 disabled:cursor-not-allowed"
-                        aria-label="Post comment"
-                    >
-                        <Icon name="paper-airplane" className="w-5 h-5" />
-                    </button>
-                </form>
-          </footer>
+                <footer className="p-3 border-t border-slate-700">
+                    {replyingTo && (
+                        <div className="text-xs text-slate-400 px-2 pb-2 flex justify-between items-center">
+                            <span>Replying to {replyingTo.author.name}</span>
+                            <button onClick={() => setReplyingTo(null)} className="font-bold">Cancel</button>
+                        </div>
+                    )}
+                    <form onSubmit={handlePostCommentSubmit} className="flex items-center gap-2">
+                        <img src={currentUser.avatarUrl} alt="Your avatar" className="w-9 h-9 rounded-full" />
+                        <input
+                            ref={commentInputRef}
+                            type="text"
+                            value={newCommentText}
+                            onChange={(e) => setNewCommentText(e.target.value)}
+                            placeholder="Write a comment..."
+                            className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-lime-500 focus:border-lime-500"
+                        />
+                        <button
+                            type="submit"
+                            disabled={isPostingComment || !newCommentText.trim()}
+                            className="p-2.5 rounded-full bg-lime-600 text-black hover:bg-lime-500 disabled:bg-slate-500 disabled:cursor-not-allowed"
+                            aria-label="Post comment"
+                        >
+                            <Icon name="paper-airplane" className="w-5 h-5" />
+                        </button>
+                    </form>
+                </footer>
+              </>
+          )}
       </aside>
     </div>
     {isReactionModalOpen && (

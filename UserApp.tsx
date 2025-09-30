@@ -1213,7 +1213,20 @@ const UserApp: React.FC = () => {
          <LeadFormModal post={leadFormPost} currentUser={user} onClose={() => setLeadFormPost(null)} onSubmit={handleLeadSubmit} />
       )}
        {viewerPost && (
-         <ImageModal post={viewerPost} currentUser={user} isLoading={isLoadingViewerPost} onClose={handleClosePhotoViewer} onReactToPost={handleReactToPost} onReactToComment={handleReactToComment} onPostComment={handlePostComment} onEditComment={handleEditComment} onDeleteComment={handleDeleteComment} onOpenProfile={handleOpenProfile} onSharePost={handleSharePost}/>
+         <ImageModal 
+            post={viewerPost} 
+            currentUser={user} 
+            isLoading={isLoadingViewerPost} 
+            onClose={handleClosePhotoViewer} 
+            onReactToPost={handleReactToPost} 
+            onReactToComment={handleReactToComment} 
+            onPostComment={handlePostComment} 
+            onEditComment={handleEditComment} 
+            onDeleteComment={handleDeleteComment} 
+            onOpenProfile={handleOpenProfile} 
+            onSharePost={handleSharePost}
+            onOpenCommentsSheet={handleOpenComments}
+         />
       )}
        {incomingCall && (
           <IncomingCallModal 
