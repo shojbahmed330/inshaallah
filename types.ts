@@ -37,6 +37,7 @@ export type ChatTheme = 'default' | 'sunset' | 'classic' | 'aurora' | 'golden-ho
 export type GroupCategory = 'General' | 'Food' | 'Gaming' | 'Music' | 'Technology' | 'Travel' | 'Art & Culture' | 'Sports';
 export type GroupRole = 'Admin' | 'Moderator' | 'Top Contributor';
 export type StoryPrivacy = 'public' | 'friends';
+export type PostImageLayout = 'single' | 'grid' | 'hexagon' | 'spotlight' | 'masonry' | 'timeline';
 
 // --- Core Data Structures ---
 
@@ -123,6 +124,8 @@ export interface Post {
   caption: string;
   createdAt: string;
   imageUrl?: string;
+  imageUrls?: string[];
+  imageLayout?: PostImageLayout;
   newPhotoUrl?: string; // For profile/cover photo changes
   imagePrompt?: string;
   videoUrl?: string;

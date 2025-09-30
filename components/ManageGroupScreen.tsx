@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 // FIX: Import Author type to resolve type mismatch for group members.
 import { AppView, Group, Post, User, Author } from '../types';

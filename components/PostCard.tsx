@@ -38,6 +38,57 @@ const REACTION_COLORS: { [key: string]: string } = {
     '😡': 'text-orange-500',
 };
 
+const ImageGridRenderer: React.FC<{
+    urls: string[];
+    layout: Post['imageLayout'];
+    post: Post;
+    onOpenPhotoViewer?: (post: Post) => void;
+}> = ({ urls, layout, post, onOpenPhotoViewer }) => {
+    
+    const handleImageClick = (e: React.MouseEvent, url: string) => {
+        e.stopPropagation();
+        if (onOpenPhotoViewer) {
+            const tempPostForViewer = { ...post, imageUrl: url, imageUrls: undefined };
+            onOpenPhotoViewer(tempPostForViewer);
+        }
+    };
+
+    switch (layout) {
+        case 'hexagon':
+            return <div className="layout-hexagon image-layout-container">{urls.slice(0, 7).map((url, i) => (
+                <div key={i} className="hexagon-item"><img src={url} alt={`Post image ${i + 1}`} onClick={(e) => handleImageClick(e, url)} /></div>
+            ))}</div>;
+        
+        case 'spotlight':
+            const [main, ...thumbs] = urls;
+            return <div className="layout-spotlight image-layout-container">
+                {main && <div className="spotlight-main"><img src={main} alt="Main post image" onClick={(e) => handleImageClick(e, main)} /></div>}
+                {thumbs.length > 0 && <div className="spotlight-thumbs">{thumbs.slice(0, 5).map((url, i) => (
+                    <div key={i} className="spotlight-thumb"><img src={url} alt={`Thumb ${i + 1}`} onClick={(e) => handleImageClick(e, url)} /></div>
+                ))}</div>}
+            </div>;
+        
+        case 'masonry':
+             return <div className="layout-masonry image-layout-container">{urls.map((url, i) => (
+                <div key={i} className="masonry-item"><img src={url} alt={`Post image ${i + 1}`} onClick={(e) => handleImageClick(e, url)} /></div>
+            ))}</div>;
+
+        case 'timeline':
+            return <div className="layout-timeline image-layout-container">{urls.map((url, i) => (
+                <div key={i} className="timeline-item"><img src={url} alt={`Post image ${i + 1}`} onClick={(e) => handleImageClick(e, url)} /></div>
+            ))}</div>;
+
+        case 'grid':
+        default:
+            let gridClass = 'count-more';
+            if (urls.length <= 4) gridClass = `count-${urls.length}`;
+            
+            return <div className={`layout-grid ${gridClass} image-layout-container -mx-6`}>{urls.map((url, i) => (
+                <img key={i} src={url} alt={`Post image ${i + 1}`} onClick={(e) => handleImageClick(e, url)} />
+            ))}</div>;
+    }
+}
+
 export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onOpenComments, onAuthorClick, onSharePost, onAdClick, onDeletePost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote }) => {
   // FINAL FIX: Add a guard clause for the post and its author.
   if (!post || !post.author) {
@@ -213,6 +264,10 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
   }
   
   const renderVisualMedia = () => {
+    if (post.imageUrls && post.imageUrls.length > 0) {
+        return <ImageGridRenderer urls={post.imageUrls} layout={post.imageLayout} post={post} onOpenPhotoViewer={onOpenPhotoViewer} />;
+    }
+
     if (post.postType === 'profile_picture_change' && post.newPhotoUrl) {
         return (
              <div className="mb-4 flex justify-center">
