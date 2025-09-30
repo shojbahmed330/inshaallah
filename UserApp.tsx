@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-// FIX: ScrollState enum needs to be used for state initialization and updates.
 import { AppView, User, VoiceState, Post, Comment, ScrollState, Notification, Campaign, Group, Story, Conversation, Call } from './types';
 import AuthScreen from './components/AuthScreen';
 import FeedScreen from './components/FeedScreen';
@@ -165,7 +164,6 @@ const UserApp: React.FC = () => {
   const [voiceState, setVoiceState] = useState<VoiceState>(VoiceState.IDLE);
   const [ttsMessage, setTtsMessage] = useState<string>('Say a command...');
   const [lastCommand, setLastCommand] = useState<string | null>(null);
-  // FIX: Initialize scrollState with the enum member instead of a string literal.
   const [scrollState, setScrollState] = useState<ScrollState>(ScrollState.NONE);
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
@@ -436,15 +434,15 @@ const UserApp: React.FC = () => {
     let unsubscribes: (()=>void)[] = [];
     
     setIsLoadingFeed(true);
-    // This listener for the feed is efficient and uses the friend/block lists in its query logic.
     const unsubscribePosts = firebaseService.listenToFeedPosts(user.id, userFriendIds, userBlockedIds, (feedPosts) => {
         setPosts(feedPosts);
         setIsLoadingFeed(false);
     });
     unsubscribes.push(unsubscribePosts);
     
-    // --- POLLING LOGIC FOR FRIENDS' ONLINE STATUS ---
-    // This replaces the expensive real-time listener to prevent quota issues.
+    // --- FETCH FRIENDS (NO POLLING) ---
+    // The previous polling logic was causing permission errors. 
+    // This fetches friends once when the friend list changes, making the app more stable.
     let isMounted = true;
     const fetchFriends = async () => {
         if (!user?.id) return;
@@ -458,12 +456,10 @@ const UserApp: React.FC = () => {
         }
     };
 
-    fetchFriends(); // Initial fetch
-    const friendsInterval = setInterval(fetchFriends, 5000); // Poll every 5 seconds
+    fetchFriends();
     
     return () => {
         isMounted = false;
-        clearInterval(friendsInterval);
         unsubscribes.forEach(unsub => unsub());
     };
   }, [user?.id, JSON.stringify(userFriendIds), JSON.stringify(userBlockedIds)]);
@@ -505,7 +501,6 @@ const UserApp: React.FC = () => {
 
   const handleCommand = useCallback((command: string) => {
     setVoiceState(VoiceState.PROCESSING);
-    // FIX: Use the ScrollState enum member for state updates.
     setScrollState(ScrollState.NONE);
     setLastCommand(command);
     setCommandInputValue('');

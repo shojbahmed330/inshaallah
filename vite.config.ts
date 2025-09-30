@@ -5,7 +5,6 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
       define: {
-        // FIX: Removed redundant definition. Only process.env.API_KEY should be used.
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       },
       resolve: {

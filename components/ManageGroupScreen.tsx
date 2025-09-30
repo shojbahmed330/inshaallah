@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-// FIX: Import Author type to resolve type mismatch for group members.
-import { AppView, Group, Post, User, Author } from '../types';
+import { AppView, Group, Post, User, Author, GroupCategory } from '../types';
 import { geminiService } from '../services/geminiService';
 import Icon from './Icon';
-import { getTtsPrompt } from '../constants';
+import { getTtsPrompt, GROUP_CATEGORIES } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
 
 type ActiveTab = 'members' | 'requests' | 'posts' | 'settings';
 
 interface MemberManagementCardProps {
-    // FIX: Group members are of type Author, not User. Updated prop type.
     member: Author;
     group: Group;
     currentUser: User;
@@ -21,7 +19,6 @@ const MemberManagementCard: React.FC<MemberManagementCardProps> = ({ member, gro
     const { language } = useSettings();
     
     const handlePromote = async (newRole: 'Admin' | 'Moderator') => {
-        // FIX: Cast member to User to satisfy the service layer function signature. The Author type has all the necessary properties.
         const success = await geminiService.promoteGroupMember(group.id, member as User, newRole);
         if (success) {
             onSetTtsMessage(getTtsPrompt('member_promoted', language, { name: member.name, role: newRole }));
@@ -30,7 +27,6 @@ const MemberManagementCard: React.FC<MemberManagementCardProps> = ({ member, gro
     };
 
     const handleDemote = async (oldRole: 'Admin' | 'Moderator') => {
-        // FIX: Cast member to User to satisfy the service layer function signature.
         const success = await geminiService.demoteGroupMember(group.id, member as User, oldRole);
         if (success) {
             onSetTtsMessage(getTtsPrompt('member_demoted', language, { name: member.name }));
@@ -40,7 +36,6 @@ const MemberManagementCard: React.FC<MemberManagementCardProps> = ({ member, gro
 
     const handleRemove = async () => {
         if (window.confirm(`Are you sure you want to remove ${member.name} from the group? This cannot be undone.`)) {
-            // FIX: Cast member to User to satisfy the service layer function signature.
             const success = await geminiService.removeGroupMember(group.id, member as User);
             if (success) {
                 onSetTtsMessage(getTtsPrompt('member_removed', language, { name: member.name }));

@@ -687,10 +687,11 @@ export const firebaseService = {
         });
     },
 
+// FIX: Update `createPost` to handle multiple files (`mediaFiles: File[]`) instead of a single file.
     async createPost(
         postData: any,
         media: {
-            mediaFile?: File | null;
+            mediaFiles?: File[];
             audioBlobUrl?: string | null;
             generatedImageBase64?: string | null;
         }
@@ -716,12 +717,24 @@ export const firebaseService = {
 
         const userId = user.id;
 
-        if (media.mediaFile) {
-            const { url, type } = await uploadMediaToCloudinary(media.mediaFile, `post_${userId}_${Date.now()}`);
-            if (type === 'video') {
+        if (media.mediaFiles && media.mediaFiles.length > 0) {
+            // A post can be a single video or multiple images.
+            if (media.mediaFiles[0].type.startsWith('video/')) {
+                // If it's a video, we only upload the first one.
+                const { url } = await uploadMediaToCloudinary(media.mediaFiles[0], `post_video_${userId}_${Date.now()}`);
                 postToSave.videoUrl = url;
             } else {
-                postToSave.imageUrl = url;
+                // If they are images, upload all of them.
+                const imageUrls = await Promise.all(
+                    media.mediaFiles.map(file => 
+                        uploadMediaToCloudinary(file, `post_image_${userId}_${Date.now()}_${Math.random()}`).then(result => result.url)
+                    )
+                );
+                postToSave.imageUrls = imageUrls;
+                // For legacy/preview purposes, we can set the first image as the main imageUrl.
+                if (imageUrls.length > 0) {
+                    postToSave.imageUrl = imageUrls[0];
+                }
             }
         }
         

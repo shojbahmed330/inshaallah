@@ -167,7 +167,6 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
                     </button>
                 </div>
                 <div className="flex-grow flex flex-col justify-center">
-                    {/* FIX: Explicitly map props to VoiceCommandInput to satisfy its interface. */}
                     <VoiceCommandInput
                         onSendCommand={(cmd) => { props.onSendCommand(cmd); setIsCommandOpen(false); }}
                         voiceState={props.voiceState}

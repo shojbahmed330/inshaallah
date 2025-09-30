@@ -18,6 +18,7 @@ interface CreatePostScreenProps {
   groupId?: string;
   groupName?: string;
   startRecording?: boolean;
+  selectMedia?: 'image' | 'video';
 }
 
 const FEELINGS = [
@@ -43,7 +44,7 @@ const LAYOUTS: { name: PostImageLayout, icon: React.ReactNode }[] = [
 ];
 
 
-const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPostCreated, onSetTtsMessage, lastCommand, onDeductCoinsForImage, onCommandProcessed, onGoBack, groupId, groupName, startRecording }) => {
+const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPostCreated, onSetTtsMessage, lastCommand, onDeductCoinsForImage, onCommandProcessed, onGoBack, groupId, groupName, startRecording, selectMedia }) => {
     const [caption, setCaption] = useState('');
     const [feeling, setFeeling] = useState<Feeling | null>(null);
     const [subView, setSubView] = useState<SubView>('main');
@@ -71,14 +72,7 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
             timerRef.current = null;
         }
     }, []);
-
-    const clearMediaFiles = useCallback(() => {
-        mediaPreviewUrls.forEach(URL.revokeObjectURL);
-        setMediaFiles([]);
-        setMediaPreviewUrls([]);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-    }, [mediaPreviewUrls]);
-
+    
     const clearAudioRecording = useCallback(() => {
         stopTimer();
         if (audioUrl) {
@@ -88,6 +82,14 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
         setRecordingState(RecordingState.IDLE);
         setDuration(0);
     }, [audioUrl, stopTimer]);
+    
+    const clearMediaFiles = useCallback(() => {
+        mediaPreviewUrls.forEach(URL.revokeObjectURL);
+        setMediaFiles([]);
+        setMediaPreviewUrls([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    }, [mediaPreviewUrls]);
+
 
     const startTimer = useCallback(() => {
         stopTimer();
@@ -138,10 +140,12 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
     useEffect(() => {
         if (startRecording) {
             handleStartRecording();
+        } else if (selectMedia === 'image' || selectMedia === 'video') {
+            fileInputRef.current?.click();
         } else {
             onSetTtsMessage(`What's on your mind, ${currentUser.name.split(' ')[0]}?`);
         }
-    }, [startRecording, currentUser.name, onSetTtsMessage, handleStartRecording]);
+    }, [startRecording, selectMedia, currentUser.name, onSetTtsMessage, handleStartRecording]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -158,7 +162,8 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
         if (files && files.length > 0) {
             clearAudioRecording();
             const newFiles = Array.from(files);
-            const newUrls = newFiles.map(file => URL.createObjectURL(file));
+            // FIX: Explicitly type `file` as `File` to resolve TS inference issue.
+            const newUrls = newFiles.map((file: File) => URL.createObjectURL(file));
             mediaPreviewUrls.forEach(URL.revokeObjectURL);
             setMediaFiles(newFiles);
             setMediaPreviewUrls(newUrls);
@@ -187,22 +192,6 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
                 duration: hasAudio ? duration : 0,
                 imageLayout: hasMedia ? selectedLayout : undefined,
             };
-            
-            // FIX: The property name was incorrect. Changed from 'mediaFiles' to 'mediaFile'.
-            // However, the component supports multiple files. I will adjust firebaseService to handle this instead.
-            // For now, I am fixing the component to send what the service expects.
-            // UPDATE: The better fix is to update the service. Since I cannot do that here, I will make the component compliant.
-            // UPDATE 2: On second thought, the user wants me to fix the app. The UI supports multiple files. The service should too.
-            // I will update the firebase service, but since I cannot show that change, I'll update the call here to be correct based on an *assumed* updated service.
-            // The error is `mediaFiles` does not exist. It's expecting `mediaFile`.
-            // The component state is `mediaFiles`. It's an array.
-            // I will change the service `firebaseService.ts` to accept `mediaFiles`.
-            // The call here seems correct if the service is updated. Let me change the service, then this file should be correct.
-            // No, the error is `Object literal may only specify known properties, but 'mediaFiles' does not exist...`
-            // This means I need to change `firebaseService.createPost` signature.
-            // Let's assume I've done that in `firebaseService.ts`. Then this code is correct.
-            // Wait, the error is in THIS file. So I should fix this file.
-            // The service is expecting `mediaFile`. I will send only the first file. This is a compromise.
             
             await firebaseService.createPost(
                 postBaseData, 
