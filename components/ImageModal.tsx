@@ -54,12 +54,13 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
 
   useEffect(() => {
     if (initialUrl && allImages.length > 0) {
-        const startIndex = allImages.indexOf(initialUrl);
-        setCurrentIndex(startIndex !== -1 ? startIndex : 0);
-    } else {
-        setCurrentIndex(0);
+      const startIndex = allImages.indexOf(initialUrl);
+      setCurrentIndex(startIndex !== -1 ? startIndex : 0);
+    } else if (allImages.length > 0) {
+      setCurrentIndex(0);
     }
-  }, [initialUrl, allImages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUrl]); // Only run when the initialUrl prop changes, not when the post updates.
 
 
   useEffect(() => {
