@@ -93,10 +93,27 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
     }
   }, [replyingTo]);
   
-  const commentThreads = useMemo(() => {
+  const commentsToDisplay = useMemo(() => {
     if (!post?.comments) return [];
+    
+    // A post can have a single `imageUrl`/`newPhotoUrl` or multiple `imageDetails`.
+    const imageCount = post.imageDetails?.length ?? (post.imageUrl || post.newPhotoUrl ? 1 : 0);
+    
+    if (imageCount > 1) {
+      // For multi-image posts, only show general comments in the main feed detail view.
+      return post.comments.filter(c => c && !c.imageId);
+    }
+    
+    // For single-image or no-image posts, show all comments.
+    return post.comments.filter(c => c);
+  }, [post]);
 
-    const comments = [...post.comments].filter(Boolean).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const generalCommentCount = useMemo(() => commentsToDisplay.length, [commentsToDisplay]);
+
+  const commentThreads = useMemo(() => {
+    if (!commentsToDisplay) return [];
+    // Use the pre-filtered comments
+    const comments = [...commentsToDisplay].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const commentsById = new Map<string, Comment & { replies: Comment[] }>();
     comments.forEach(c => commentsById.set(c.id, { ...c, replies: [] }));
@@ -115,7 +132,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
     });
 
     return topLevelComments;
-  }, [post?.comments]);
+  }, [commentsToDisplay]);
 
   const handlePlayComment = useCallback((comment: Comment) => {
     if (comment.type !== 'audio') return;
@@ -239,7 +256,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
         />
 
         <div className="bg-slate-800/50 rounded-xl p-4">
-             <h3 className="text-lg font-bold text-slate-200 mb-4">Comments ({post.commentCount})</h3>
+             <h3 className="text-lg font-bold text-slate-200 mb-4">Comments ({generalCommentCount})</h3>
              <div className="flex flex-col gap-4">
                 {commentThreads.length > 0 ? commentThreads.map(comment => (
                     <CommentWithReplies key={comment.id} comment={comment} />

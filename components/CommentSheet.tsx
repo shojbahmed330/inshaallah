@@ -68,9 +68,22 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
     }
   }, [replyingTo, commentToReplyTo]);
 
-  const commentThreads = useMemo(() => {
+  const commentsToDisplay = useMemo(() => {
     if (!post?.comments) return [];
-    const comments = [...post.comments].filter(Boolean).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const imageCount = post.imageDetails?.length ?? (post.imageUrl || post.newPhotoUrl ? 1 : 0);
+    if (imageCount > 1) {
+      // For multi-image posts, only show general comments in the sheet.
+      return post.comments.filter(c => c && !c.imageId);
+    }
+    // For single-image or no-image posts, show all comments.
+    return post.comments.filter(c => c);
+  }, [post]);
+
+  const generalCommentCount = useMemo(() => commentsToDisplay.length, [commentsToDisplay]);
+
+  const commentThreads = useMemo(() => {
+    if (!commentsToDisplay) return [];
+    const comments = [...commentsToDisplay].sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const commentsById = new Map<string, Comment & { replies: Comment[] }>();
     comments.forEach(c => commentsById.set(c.id, { ...c, replies: [] }));
     const topLevelComments: (Comment & { replies: Comment[] })[] = [];
@@ -84,7 +97,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
         }
     });
     return topLevelComments;
-  }, [post?.comments]);
+  }, [commentsToDisplay]);
 
   const handlePlayComment = useCallback((comment: Comment) => {
     if (comment.type !== 'audio') return;
@@ -140,7 +153,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
       >
         <header className="flex-shrink-0 p-4 border-b border-slate-700/50 flex items-center justify-center relative">
             <div className="w-10 h-1.5 bg-slate-700 rounded-full absolute top-2"></div>
-            <h2 className="text-xl font-bold text-slate-100">Comments</h2>
+            <h2 className="text-xl font-bold text-slate-100">Comments ({generalCommentCount})</h2>
             <button onClick={handleClose} className="absolute top-2 right-3 p-2 rounded-full text-slate-400 hover:bg-slate-800">
                 <Icon name="close" className="w-6 h-6" />
             </button>
