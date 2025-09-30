@@ -244,6 +244,49 @@
       .animate-bounce-in {
         animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
       }
+
+      /* Animations for Conversation Screen Polish */
+      @keyframes fade-slide-in {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-slide-in {
+        animation: fade-slide-in 0.4s ease-out forwards;
+        opacity: 0; /* Start hidden */
+      }
+
+      @keyframes glow-pulse {
+        0%, 100% { 
+          box-shadow: 0 0 0 0 rgba(217, 70, 239, 0); 
+        }
+        50% { 
+          box-shadow: 0 0 12px 3px rgba(217, 70, 239, 0.5); 
+        }
+      }
+      .animate-glow-pulse {
+        animation: glow-pulse 1.5s ease-in-out;
+      }
+
+      @keyframes slide-out-left {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(-50px);
+          opacity: 0;
+        }
+      }
+      .animate-slide-out-left {
+        animation: slide-out-left 0.3s ease-in forwards;
+      }
+
     </style>
     
   <script type="importmap">

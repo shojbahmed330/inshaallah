@@ -23,12 +23,13 @@ const SwipeableConversationItem: React.FC<{
     currentUserId: string; 
     isPinned: boolean;
     isMuted: boolean;
+    isNewlyUpdated: boolean;
     onClick: () => void;
     onPinToggle: () => void;
     onMuteToggle: () => void;
     onDelete: () => void;
     onLongPress: (event: React.TouchEvent, conversation: Conversation) => void;
-}> = ({ conversation, currentUserId, isPinned, isMuted, onClick, onPinToggle, onMuteToggle, onDelete, onLongPress }) => {
+}> = ({ conversation, currentUserId, isPinned, isMuted, isNewlyUpdated, onClick, onPinToggle, onMuteToggle, onDelete, onLongPress }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
     const [swipeX, setSwipeX] = useState(0);
@@ -106,7 +107,7 @@ const SwipeableConversationItem: React.FC<{
     const displayUnreadCount = isMuted ? 0 : unreadCount;
 
     return (
-        <div className="relative w-full overflow-hidden rounded-lg -webkit-tap-highlight-color: transparent;">
+        <div className={`relative w-full overflow-hidden rounded-lg -webkit-tap-highlight-color: transparent; ${isNewlyUpdated ? 'animate-glow-pulse' : ''}`}>
             <div className="absolute top-0 right-0 h-full flex items-center z-0">
                 <button onClick={onMuteToggle} className="w-16 h-full flex items-center justify-center bg-indigo-600 text-white"><Icon name={isMuted ? "speaker-wave" : "speaker-x-mark"} className="w-6 h-6"/></button>
                 <button onClick={onPinToggle} className="w-16 h-full flex items-center justify-center bg-fuchsia-600 text-white"><Icon name="pin" className="w-6 h-6"/></button>
@@ -203,19 +204,60 @@ const ConversationsScreen: React.FC<ConversationsScreenProps> = ({ currentUser, 
     const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem(`pinnedChats_${currentUser.id}`) || '[]')));
     const [mutedIds, setMutedIds] = useState<Set<string>>(() => new Set(JSON.parse(localStorage.getItem(`mutedChats_${currentUser.id}`) || '[]')));
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, conversation: Conversation } | null>(null);
+    const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+    const [newlyUpdatedId, setNewlyUpdatedId] = useState<string | null>(null);
+    const [exitingToChat, setExitingToChat] = useState<boolean>(false);
+    const prevConversationsRef = useRef<Map<string, string>>(new Map());
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const { language } = useSettings();
 
     useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const handleScroll = () => {
+            setIsHeaderScrolled(container.scrollTop > 10);
+        };
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    useEffect(() => {
         const unsubscribe = firebaseService.listenToConversations(currentUser.id, (convos) => {
+            if (!isLoading) {
+                const newUpdateId = convos.find(convo => {
+                    const prevLastMessageId = prevConversationsRef.current.get(convo.peer.id);
+                    return convo.lastMessage && prevLastMessageId !== convo.lastMessage.id && convo.lastMessage.senderId !== currentUser.id;
+                })?.peer.id;
+
+                if (newUpdateId) {
+                    setNewlyUpdatedId(newUpdateId);
+                    setTimeout(() => setNewlyUpdatedId(null), 2000);
+                }
+            }
+            
             setConversations(convos);
+            const newMap = new Map<string, string>();
+            convos.forEach(c => {
+                if (c.lastMessage) newMap.set(c.peer.id, c.lastMessage.id);
+            });
+            prevConversationsRef.current = newMap;
+            
             if (isLoading) {
                 onSetTtsMessage(getTtsPrompt('conversations_loaded', language));
                 setIsLoading(false);
             }
         });
         return () => unsubscribe();
-    }, [currentUser.id, onSetTtsMessage, language, isLoading]);
+    }, [currentUser.id, isLoading, onSetTtsMessage, language]);
     
+    const handleOpenChat = (peer: User) => {
+        setExitingToChat(true);
+        setTimeout(() => {
+            onOpenConversation(peer);
+            setExitingToChat(false);
+        }, 300);
+    };
+
     const handleMuteToggle = (peerId: string) => {
         const newSet = new Set(mutedIds);
         if (newSet.has(peerId)) newSet.delete(peerId);
@@ -280,23 +322,23 @@ const ConversationsScreen: React.FC<ConversationsScreenProps> = ({ currentUser, 
     }
 
     return (
-        <div className="h-full w-full flex flex-col bg-slate-900">
-            <div className="flex-shrink-0 sticky top-0 z-10 bg-slate-900/80 backdrop-blur-sm p-4 sm:p-6 space-y-4">
-                <div className="flex justify-between items-center"><h1 className="text-3xl font-bold text-slate-100">Messages</h1><button className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="edit" className="w-6 h-6" /></button></div>
+        <div className={`h-full w-full flex flex-col bg-slate-900 ${exitingToChat ? 'animate-slide-out-left' : ''}`}>
+            <div className={`flex-shrink-0 sticky top-0 z-20 bg-slate-900/80 p-4 sm:p-6 space-y-4 transition-all duration-300 ${isHeaderScrolled ? 'backdrop-blur-sm shadow-lg' : ''}`}>
+                <div className="flex justify-between items-center"><h1 className={`font-bold text-slate-100 transition-all duration-300 ${isHeaderScrolled ? 'text-2xl' : 'text-3xl'}`}>Messages</h1><button className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="edit" className="w-6 h-6" /></button></div>
                  <div className="relative"><div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"><svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/></svg></div><input type="search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages..." className="bg-slate-800 border border-slate-700 text-slate-100 text-base rounded-full focus:ring-fuchsia-500 focus:border-fuchsia-500 block w-full pl-10 p-2.5 transition"/></div>
             </div>
             
-            <div className="flex-grow overflow-y-auto px-2 sm:px-4">
+            <div ref={scrollContainerRef} className="flex-grow overflow-y-auto px-2 sm:px-4">
                 {conversations.length > 0 ? (
-                   <div className="flex flex-col">
+                   <div className="flex flex-col gap-1.5">
                         {pinned.length > 0 && (
-                            <section><SectionHeader title="Pinned" />{pinned.map(c => <SwipeableConversationItem key={c.peer.id} conversation={c} currentUserId={currentUser.id} isPinned={true} isMuted={mutedIds.has(c.peer.id)} onClick={() => onOpenConversation(c.peer)} onPinToggle={() => togglePin(c.peer.id)} onMuteToggle={() => handleMuteToggle(c.peer.id)} onDelete={() => handleDelete(c)} onLongPress={handleLongPress} />)}</section>
+                            <section><SectionHeader title="Pinned" />{pinned.map((c, index) => <div key={c.peer.id} className="animate-fade-slide-in" style={{ animationDelay: `${index * 50}ms` }}><SwipeableConversationItem conversation={c} currentUserId={currentUser.id} isPinned={true} isMuted={mutedIds.has(c.peer.id)} isNewlyUpdated={newlyUpdatedId === c.peer.id} onClick={() => handleOpenChat(c.peer)} onPinToggle={() => togglePin(c.peer.id)} onMuteToggle={() => handleMuteToggle(c.peer.id)} onDelete={() => handleDelete(c)} onLongPress={handleLongPress} /></div>)}</section>
                         )}
                          {unread.length > 0 && (
-                            <section><SectionHeader title="Unread" />{unread.map(c => <SwipeableConversationItem key={c.peer.id} conversation={c} currentUserId={currentUser.id} isPinned={false} isMuted={mutedIds.has(c.peer.id)} onClick={() => onOpenConversation(c.peer)} onPinToggle={() => togglePin(c.peer.id)} onMuteToggle={() => handleMuteToggle(c.peer.id)} onDelete={() => handleDelete(c)} onLongPress={handleLongPress} />)}</section>
+                            <section><SectionHeader title="Unread" />{unread.map((c, index) => <div key={c.peer.id} className="animate-fade-slide-in" style={{ animationDelay: `${(pinned.length + index) * 50}ms` }}><SwipeableConversationItem conversation={c} currentUserId={currentUser.id} isPinned={false} isMuted={mutedIds.has(c.peer.id)} isNewlyUpdated={newlyUpdatedId === c.peer.id} onClick={() => handleOpenChat(c.peer)} onPinToggle={() => togglePin(c.peer.id)} onMuteToggle={() => handleMuteToggle(c.peer.id)} onDelete={() => handleDelete(c)} onLongPress={handleLongPress} /></div>)}</section>
                         )}
                         {others.length > 0 && (
-                           <section><SectionHeader title="All Messages" />{others.map(c => <SwipeableConversationItem key={c.peer.id} conversation={c} currentUserId={currentUser.id} isPinned={false} isMuted={mutedIds.has(c.peer.id)} onClick={() => onOpenConversation(c.peer)} onPinToggle={() => togglePin(c.peer.id)} onMuteToggle={() => handleMuteToggle(c.peer.id)} onDelete={() => handleDelete(c)} onLongPress={handleLongPress} />)}</section>
+                           <section><SectionHeader title="All Messages" />{others.map((c, index) => <div key={c.peer.id} className="animate-fade-slide-in" style={{ animationDelay: `${(pinned.length + unread.length + index) * 50}ms` }}><SwipeableConversationItem conversation={c} currentUserId={currentUser.id} isPinned={false} isMuted={mutedIds.has(c.peer.id)} isNewlyUpdated={newlyUpdatedId === c.peer.id} onClick={() => handleOpenChat(c.peer)} onPinToggle={() => togglePin(c.peer.id)} onMuteToggle={() => handleMuteToggle(c.peer.id)} onDelete={() => handleDelete(c)} onLongPress={handleLongPress} /></div>)}</section>
                         )}
                    </div>
                 ) : (
