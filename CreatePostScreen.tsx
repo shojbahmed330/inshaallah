@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RecordingState, User, Post, PollOption } from './types';
 import { IMAGE_GENERATION_COST, getTtsPrompt } from './constants';
@@ -251,10 +250,11 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ user, onPostCreated
             };
         }
         
+        // @FIX: 'mediaFile' does not exist. It should be 'mediaFiles' and expect an array.
         await firebaseService.createPost(
             postBaseData, 
             {
-                mediaFile: mediaFile,
+                mediaFiles: mediaFile ? [mediaFile] : [],
                 audioBlobUrl: audioUrl,
                 generatedImageBase64: generatedImageUrl
             }

@@ -25,7 +25,7 @@ interface ProfileScreenProps {
   onCurrentUserUpdate: (updatedUser: User) => void;
   onPostCreated: (newPost: Post) => void;
   onSharePost: (post: Post) => void;
-  onOpenPhotoViewer: (post: Post) => void;
+  onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   
   onCommandProcessed: () => void;
   scrollState: ScrollState;
@@ -186,20 +186,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer || scrollState === 'none') {
+    if (!scrollContainer || scrollState === ScrollState.NONE) {
         return;
     }
 
     let animationFrameId: number;
     const animateScroll = () => {
-        if (scrollState === 'down') {
+        if (scrollState === ScrollState.DOWN) {
             scrollContainer.scrollTop += 2;
-        } else if (scrollState === 'up') {
+        } else if (scrollState === ScrollState.UP) {
             scrollContainer.scrollTop -= 2;
         }
         animationFrameId = requestAnimationFrame(animateScroll);
     };
-
+    
     animationFrameId = requestAnimationFrame(animateScroll);
 
     return () => {
@@ -473,7 +473,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             return (
                 <div className="flex items-center gap-2">
                     <button onClick={() => handleRespondToRequest('decline')} className={`${baseClasses} bg-slate-600 text-white hover:bg-slate-500`}>Decline</button>
-                    <button onClick={() => handleRespondToRequest('accept')} className={`${baseClasses} bg-lime-600 text-black hover:bg-lime-500`}><Icon name="add-friend" className="w-5 h-5"/> Respond to Request</button>
+                    <button onClick={() => handleRespondToRequest('accept')} className={`${baseClasses} bg-fuchsia-600 text-white hover:bg-fuchsia-500`}><Icon name="add-friend" className="w-5 h-5"/> Respond to Request</button>
                 </div>
             );
         default:
@@ -484,9 +484,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const TabButton: React.FC<{tabId: 'posts' | 'about' | 'friends'; label: string; count?: number}> = ({ tabId, label, count }) => (
     <button 
         onClick={() => setActiveTab(tabId)}
-        className={`px-4 py-3 font-semibold text-lg border-b-4 transition-colors ${activeTab === tabId ? 'border-lime-500 text-lime-300' : 'border-transparent text-lime-500 hover:text-lime-300'}`}
+        className={`px-4 py-3 font-semibold text-lg border-b-4 transition-colors ${activeTab === tabId ? 'border-fuchsia-500 text-fuchsia-300' : 'border-transparent text-fuchsia-500 hover:text-fuchsia-300'}`}
     >
-        {label} {count !== undefined && <span className={`ml-1 text-sm text-lime-400/80`}>{count}</span>}
+        {label} {count !== undefined && <span className={`ml-1 text-sm text-fuchsia-400/80`}>{count}</span>}
     </button>
   );
 
@@ -594,7 +594,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     </div>
                 </div>
 
-                <div className="border-t border-lime-500/20 px-4">
+                <div className="border-t border-fuchsia-500/20 px-4">
                     <TabButton tabId="posts" label="Posts" count={posts.length} />
                     <TabButton tabId="about" label="About" />
                     <TabButton tabId="friends" label="Friends" count={friendsList.length} />

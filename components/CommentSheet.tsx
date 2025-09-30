@@ -19,7 +19,7 @@ interface CommentSheetProps {
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
-  onOpenPhotoViewer: (post: Post) => void;
+  onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
 }
 
 const CommentSheet: React.FC<CommentSheetProps> = ({
@@ -154,8 +154,8 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
                         <button onClick={() => onOpenProfile(post.author.username)} className="flex items-center text-left group">
                             <img src={post.author.avatarUrl} alt={post.author.name} className="w-12 h-12 rounded-full mr-4"/>
                             <div>
-                                <p className="font-bold text-lime-200 text-lg group-hover:underline">{post.author.name}</p>
-                                <p className="text-lime-500 text-sm">{new Date(post.createdAt).toLocaleDateString()}</p>
+                                <p className="font-bold text-fuchsia-300 text-lg group-hover:underline">{post.author.name}</p>
+                                <p className="text-fuchsia-500 text-sm">{new Date(post.createdAt).toLocaleDateString()}</p>
                             </div>
                         </button>
                     </div>
@@ -191,10 +191,10 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
                     value={newCommentText}
                     onChange={(e) => setNewCommentText(e.target.value)}
                     placeholder="Write a comment..."
-                    className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-lime-500 focus:border-lime-500"
+                    className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-fuchsia-500 focus:border-fuchsia-500"
                     autoFocus={!!commentToReplyTo}
                 />
-                 <button type="submit" className="p-2.5 rounded-full bg-lime-600 text-black hover:bg-lime-500 disabled:bg-slate-500" disabled={!newCommentText.trim() || isPostingComment}>
+                 <button type="submit" className="p-2.5 rounded-full bg-fuchsia-600 text-white hover:bg-fuchsia-500 disabled:bg-slate-500" disabled={!newCommentText.trim() || isPostingComment}>
                     <Icon name="paper-airplane" className="w-5 h-5" />
                  </button>
             </form>

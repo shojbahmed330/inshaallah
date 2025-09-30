@@ -19,7 +19,7 @@ interface PostCardProps {
   onSharePost?: (post: Post) => void;
   onAdClick?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
-  onOpenPhotoViewer?: (post: Post) => void;
+  onOpenPhotoViewer?: (post: Post, initialUrl?: string) => void;
   groupRole?: GroupRole;
   isGroupAdmin?: boolean;
   isPinned?: boolean;
@@ -42,16 +42,32 @@ const ImageGridRenderer: React.FC<{
     urls: string[];
     layout: Post['imageLayout'];
     post: Post;
-    onOpenPhotoViewer?: (post: Post) => void;
+    onOpenPhotoViewer?: (post: Post, initialUrl: string) => void;
 }> = ({ urls, layout, post, onOpenPhotoViewer }) => {
     
     const handleImageClick = (e: React.MouseEvent, url: string) => {
         e.stopPropagation();
-        if (onOpenPhotoViewer) {
-            const tempPostForViewer = { ...post, imageUrl: url, imageUrls: undefined };
-            onOpenPhotoViewer(tempPostForViewer);
-        }
+        onOpenPhotoViewer?.(post, url);
     };
+
+    const totalImages = urls.length;
+    if (totalImages > 4) {
+        const displayedUrls = urls.slice(0, 4);
+        return (
+            <div className="layout-grid count-4 image-layout-container -mx-6">
+                {displayedUrls.map((url, i) => (
+                    <div key={i} className="relative cursor-pointer group" onClick={(e) => handleImageClick(e, url)}>
+                        <img src={url} alt={`Post image ${i + 1}`} className="w-full h-full object-cover group-hover:opacity-80 transition-opacity" />
+                        {i === 3 && (
+                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+                                <span className="text-white text-3xl font-bold">+{totalImages - 4}</span>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    }
 
     switch (layout) {
         case 'hexagon':
@@ -274,7 +290,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onOpenPhotoViewer?.(post);
+                        onOpenPhotoViewer?.(post, post.newPhotoUrl);
                     }}
                     className='w-48 h-48 rounded-full overflow-hidden bg-slate-800'
                     aria-label="View image full screen"
@@ -291,7 +307,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onOpenPhotoViewer?.(post);
+                        onOpenPhotoViewer?.(post, post.newPhotoUrl);
                     }}
                     className="w-full h-full block"
                     aria-label="View image full screen"
@@ -323,7 +339,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
             <button
                 onClick={(e) => {
                     e.stopPropagation();
-                    onOpenPhotoViewer?.(post);
+                    onOpenPhotoViewer?.(post, post.imageUrl);
                 }}
                 className="w-full h-auto block"
                 aria-label="View image full screen"

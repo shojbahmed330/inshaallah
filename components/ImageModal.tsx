@@ -9,6 +9,7 @@ interface ImageModalProps {
   post: Post | null;
   currentUser: User;
   isLoading: boolean;
+  initialUrl?: string;
   onClose: () => void;
   onReactToPost: (postId: string, emoji: string) => void;
   onReactToComment: (postId: string, commentId: string, emoji: string) => void;
@@ -22,7 +23,7 @@ interface ImageModalProps {
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
-const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, onClose, onReactToPost, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet }) => {
   if (!post || !post.author) {
     return null;
   }
@@ -35,13 +36,33 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const pickerTimeout = useRef<number | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const isMobile = window.innerWidth < 768;
 
+  const allImages = useMemo(() => {
+    if (post?.imageUrls && post.imageUrls.length > 0) return post.imageUrls;
+    if (post?.imageUrl) return [post.imageUrl];
+    if (post?.newPhotoUrl) return [post.newPhotoUrl];
+    return [];
+  }, [post]);
+
+  useEffect(() => {
+    if (initialUrl && allImages.length > 0) {
+        const startIndex = allImages.indexOf(initialUrl);
+        setCurrentIndex(startIndex !== -1 ? startIndex : 0);
+    } else {
+        setCurrentIndex(0);
+    }
+  }, [initialUrl, allImages]);
+
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
+      if (e.key === 'Escape') onClose();
+      if (allImages.length > 1) {
+          if (e.key === 'ArrowLeft') setCurrentIndex(i => (i === 0 ? allImages.length - 1 : i - 1));
+          if (e.key === 'ArrowRight') setCurrentIndex(i => (i === allImages.length - 1 ? 0 : i + 1));
       }
     };
 
@@ -52,7 +73,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'auto';
     };
-  }, [onClose]);
+  }, [onClose, allImages]);
 
   useEffect(() => {
     if (replyingTo) {
@@ -60,9 +81,10 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
     }
   }, [replyingTo]);
   
+  // @FIX: Refactored comment threading logic to be safer and satisfy TypeScript.
   const commentThreads = useMemo(() => {
-    if (!post.comments) return [];
-    
+    if (!post?.comments) return [];
+
     const comments = [...post.comments].filter(Boolean).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     const commentsById = new Map<string, Comment & { replies: Comment[] }>();
@@ -82,7 +104,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
     });
 
     return topLevelComments;
-  }, [post.comments]);
+  }, [post?.comments]);
 
   const handlePlayComment = (comment: Comment) => {
     if (comment.type !== 'audio') return;
@@ -175,16 +197,25 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
       );
   };
 
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex(i => (i === 0 ? allImages.length - 1 : i - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex(i => (i === allImages.length - 1 ? 0 : i + 1));
+  };
+
   if (isLoading) {
     return (
         <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center">
-            <Icon name="logo" className="w-16 h-16 text-lime-500 animate-spin" />
+            <Icon name="logo" className="w-16 h-16 text-fuchsia-500 animate-spin" />
         </div>
     );
   }
   
-  const imageUrl = post.imageUrl || post.newPhotoUrl;
-  if (!imageUrl) {
+  if (allImages.length === 0) {
     onClose();
     return null;
   }
@@ -206,14 +237,29 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
       <main className="flex-grow flex items-center justify-center p-4 md:p-8 relative" onClick={(e) => e.stopPropagation()}>
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                <Icon name="logo" className="w-16 h-16 text-lime-500 animate-spin"/>
+                <Icon name="logo" className="w-16 h-16 text-fuchsia-500 animate-spin"/>
             </div>
           )}
           <img
-            src={imageUrl}
+            src={allImages[currentIndex]}
             alt="Full screen view"
             className={`max-w-full max-h-full object-contain rounded-lg transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`}
           />
+
+          {allImages.length > 1 && (
+              <>
+                  <button onClick={handlePrev} className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/70 rounded-full transition-colors text-white" aria-label="Previous image">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  <button onClick={handleNext} className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/70 rounded-full transition-colors text-white" aria-label="Next image">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                      {currentIndex + 1} / {allImages.length}
+                  </div>
+              </>
+          )}
+
       </main>
 
       <aside className={`w-full h-auto md:h-auto md:w-[380px] flex-shrink-0 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700/50 flex flex-col transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
@@ -221,7 +267,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
               <button onClick={() => onOpenProfile(post.author.username)} className="flex items-center gap-3 group">
                 <img src={post.author.avatarUrl} alt={post.author.name} className="w-12 h-12 rounded-full" />
                 <div>
-                  <p className="font-bold text-lg text-lime-300 group-hover:underline">{post.author.name}</p>
+                  <p className="font-bold text-lg text-fuchsia-300 group-hover:underline">{post.author.name}</p>
                   <p className="text-sm text-slate-400">{new Date(post.createdAt).toLocaleString()}</p>
                 </div>
               </button>
@@ -237,17 +283,17 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                         {topReactions.map(emoji => 
                             <span key={emoji} className="text-lg -ml-1 border-2 border-slate-900 rounded-full">{emoji}</span>
                         )}
-                        <span className="text-sm text-lime-500 ml-2 hover:underline">{reactionCount}</span>
+                        <span className="text-sm text-fuchsia-500 ml-2 hover:underline">{reactionCount}</span>
                     </button>
-                    <button onClick={() => isMobile ? onOpenCommentsSheet(post) : commentInputRef.current?.focus()} className="text-sm text-lime-500 hover:underline">{post.commentCount || 0} comments</button>
+                    <button onClick={() => isMobile ? onOpenCommentsSheet(post) : commentInputRef.current?.focus()} className="text-sm text-fuchsia-500 hover:underline">{post.commentCount || 0} comments</button>
                 </div>
               )}
           </div>
           
-           <div className="flex items-center text-lime-400 gap-1 p-2 border-b border-slate-700">
+           <div className="flex items-center text-fuchsia-400 gap-1 p-2 border-b border-slate-700">
                 <div onMouseEnter={handleMouseEnterPicker} onMouseLeave={handleMouseLeavePicker} className="relative flex-1">
                     {isPickerOpen && (
-                        <div onMouseEnter={handleMouseEnterPicker} onMouseLeave={handleMouseLeavePicker} className="absolute bottom-full mb-2 bg-slate-900/90 backdrop-blur-sm border border-lime-500/20 rounded-full p-1.5 flex items-center gap-1 shadow-lg animate-fade-in-fast">
+                        <div onMouseEnter={handleMouseEnterPicker} onMouseLeave={handleMouseLeavePicker} className="absolute bottom-full mb-2 bg-slate-900/90 backdrop-blur-sm border border-fuchsia-500/20 rounded-full p-1.5 flex items-center gap-1 shadow-lg animate-fade-in-fast">
                             {REACTIONS.map(emoji => (
                                 <button key={emoji} onClick={(e) => handleReaction(e, emoji)} className="text-3xl p-1 rounded-full hover:bg-slate-700/50 transition-transform hover:scale-125">
                                     {emoji}
@@ -255,16 +301,16 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                             ))}
                         </div>
                     )}
-                    <button onClick={(e) => handleReaction(e, myReaction || '👍')} className={`w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 ${myReaction ? 'text-lime-400 font-bold' : 'text-lime-400/80'}`}>
+                    <button onClick={(e) => handleReaction(e, myReaction || '👍')} className={`w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 ${myReaction ? 'text-fuchsia-400 font-bold' : 'text-fuchsia-400/80'}`}>
                         {myReaction ? <span className="text-xl">{myReaction}</span> : <Icon name="like" className="w-6 h-6" />}
                         <span className="font-semibold text-base">React</span>
                     </button>
                 </div>
-               <button onClick={(e) => { e.stopPropagation(); if (isMobile) { onOpenCommentsSheet(post); } else { commentInputRef.current?.focus(); } }} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 text-lime-400/80">
+               <button onClick={(e) => { e.stopPropagation(); if (isMobile) { onOpenCommentsSheet(post); } else { commentInputRef.current?.focus(); } }} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 text-fuchsia-400/80">
                 <Icon name="comment" className="w-6 h-6" />
                 <span className="font-semibold text-base">Comment</span>
               </button>
-              <button onClick={() => onSharePost(post)} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 text-lime-400/80">
+              <button onClick={() => onSharePost(post)} className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-800 transition-colors duration-200 text-fuchsia-400/80">
                 <Icon name="share" className="w-6 h-6" />
                 <span className="font-semibold text-base">Share</span>
               </button>
@@ -295,12 +341,12 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, o
                             value={newCommentText}
                             onChange={(e) => setNewCommentText(e.target.value)}
                             placeholder="Write a comment..."
-                            className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-lime-500 focus:border-lime-500"
+                            className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-fuchsia-500 focus:border-fuchsia-500"
                         />
                         <button
                             type="submit"
                             disabled={isPostingComment || !newCommentText.trim()}
-                            className="p-2.5 rounded-full bg-lime-600 text-black hover:bg-lime-500 disabled:bg-slate-500 disabled:cursor-not-allowed"
+                            className="p-2.5 rounded-full bg-fuchsia-600 text-white hover:bg-fuchsia-500 disabled:bg-slate-500 disabled:cursor-not-allowed"
                             aria-label="Post comment"
                         >
                             <Icon name="paper-airplane" className="w-5 h-5" />

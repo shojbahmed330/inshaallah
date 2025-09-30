@@ -184,6 +184,7 @@ const UserApp: React.FC = () => {
   const [isChatRecording, setIsChatRecording] = useState(false);
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [commentSheetState, setCommentSheetState] = useState<CommentSheetState | null>(null);
+  const [imageViewerInitialUrl, setImageViewerInitialUrl] = useState<string | null>(null);
   
   const userRef = useRef(user);
   userRef.current = user;
@@ -318,6 +319,7 @@ const UserApp: React.FC = () => {
         viewerPostUnsubscribe.current = null;
     }
     setViewerPost(null);
+    setImageViewerInitialUrl(null);
     setIsLoadingViewerPost(false);
   }, []);
 
@@ -839,8 +841,9 @@ const UserApp: React.FC = () => {
     }
   };
 
-  const handleOpenPhotoViewer = (post: Post) => {
-    if (!post.imageUrl && !post.newPhotoUrl) return;
+  const handleOpenPhotoViewer = (post: Post, initialUrl?: string) => {
+    const allUrls = post.imageUrls || (post.imageUrl ? [post.imageUrl] : []) || (post.newPhotoUrl ? [post.newPhotoUrl] : []);
+    if (allUrls.length === 0) return;
 
     if (viewerPostUnsubscribe.current) {
         viewerPostUnsubscribe.current();
@@ -848,6 +851,7 @@ const UserApp: React.FC = () => {
     }
     
     setViewerPost(post);
+    setImageViewerInitialUrl(initialUrl || allUrls[0] || null);
     setIsLoadingViewerPost(false); 
 
     if (!post.isSponsored && !post.id.startsWith('ad_')) {
@@ -1211,7 +1215,8 @@ const UserApp: React.FC = () => {
          <ImageModal 
             post={viewerPost} 
             currentUser={user} 
-            isLoading={isLoadingViewerPost} 
+            isLoading={isLoadingViewerPost}
+            initialUrl={imageViewerInitialUrl || undefined}
             onClose={handleClosePhotoViewer} 
             onReactToPost={handleReactToPost} 
             onReactToComment={handleReactToComment} 

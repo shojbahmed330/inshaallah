@@ -24,7 +24,7 @@ interface FeedScreenProps {
   onAdViewed: (campaignId: string) => void;
   onAdClick: (post: Post) => void;
   onSharePost: (post: Post) => void;
-  onOpenPhotoViewer: (post: Post) => void;
+  onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   
   onCommandProcessed: () => void;
   scrollState: ScrollState;
@@ -116,16 +116,16 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
 
   useEffect(() => {
     const scrollContainer = feedContainerRef.current;
-    if (!scrollContainer || scrollState === 'none') {
+    if (!scrollContainer || scrollState === ScrollState.NONE) {
         return;
     }
 
     let animationFrameId: number;
 
     const animateScroll = () => {
-        if (scrollState === 'down') {
+        if (scrollState === ScrollState.DOWN) {
             scrollContainer.scrollTop += 2;
-        } else if (scrollState === 'up') {
+        } else if (scrollState === ScrollState.UP) {
             scrollContainer.scrollTop -= 2;
         }
         animationFrameId = requestAnimationFrame(animateScroll);
@@ -387,7 +387,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
             user={currentUser} 
             onStartCreatePost={onStartCreatePost}
         />
-        <div className="w-full border-t border-lime-500/20" />
+        <div className="w-full border-t border-fuchsia-500/20" />
         <RewardedAdWidget campaign={rewardedCampaign} onAdClick={onRewardedAdClick} />
         {posts.filter(Boolean).map((post, index) => (
             <div 

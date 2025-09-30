@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { Post, User, Comment, ScrollState } from '../types';
+// @FIX: 'ScrollState' cannot be used as a value because it was imported using 'import type'.
+import type { Post, User, Comment } from '../types';
+import { ScrollState } from '../types';
 import { PostCard } from './PostCard';
 import CommentCard from './CommentCard';
 import { geminiService } from '../services/geminiService';
@@ -21,7 +23,7 @@ interface PostDetailScreenProps {
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
-  onOpenPhotoViewer: (post: Post) => void;
+  onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   scrollState: ScrollState;
   onCommandProcessed: () => void;
@@ -72,12 +74,12 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer || scrollState === 'none') return;
+    if (!scrollContainer || scrollState === ScrollState.NONE) return;
 
     let animationFrameId: number;
     const animateScroll = () => {
-        if (scrollState === 'down') scrollContainer.scrollTop += 2;
-        else if (scrollState === 'up') scrollContainer.scrollTop -= 2;
+        if (scrollState === ScrollState.DOWN) scrollContainer.scrollTop += 2;
+        else if (scrollState === ScrollState.UP) scrollContainer.scrollTop -= 2;
         animationFrameId = requestAnimationFrame(animateScroll);
     };
 
@@ -262,7 +264,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
                     value={newCommentText}
                     onChange={(e) => setNewCommentText(e.target.value)}
                     placeholder="Write a comment..."
-                    className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-lime-500 focus:border-lime-500"
+                    className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-fuchsia-500 focus:border-fuchsia-500"
                 />
             </form>
         </div>

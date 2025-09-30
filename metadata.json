@@ -1,5 +1,5 @@
 {
-  "name": "Working 35, All Comment sheet, solve message menu",
+  "name": "Working 36, All Comment sheet, solve message menu",
   "description": "A fully voice-controlled social media application where you can sign up, log in, navigate your feed, post audio, comment, and more, all using your voice. This implementation simulates the voice experience through a text-based command interface powered by the Gemini API.",
   "requestFramePermissions": [
     "microphone",
