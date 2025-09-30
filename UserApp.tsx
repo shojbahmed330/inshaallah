@@ -825,6 +825,19 @@ const UserApp: React.FC = () => {
       await firebaseService.deleteComment(postId, commentId);
   };
 
+  const handleDeletePost = async (postId: string) => {
+    if (!user) return;
+    const success = await firebaseService.deletePost(postId, user.id);
+    if (success) {
+      setTtsMessage("Your post has been successfully deleted.");
+      if (currentView.view === AppView.POST_DETAILS && currentView.props?.postId === postId) {
+          goBack();
+      }
+    } else {
+      setTtsMessage("Failed to delete post. You may not be the author or a connection error occurred.");
+    }
+  };
+
   const handleSharePost = async (post: Post) => {
     const postUrl = `${window.location.origin}${window.location.pathname}#/post/${post.id}`;
     const shareData = {
@@ -993,9 +1006,9 @@ const UserApp: React.FC = () => {
             initialAuthError={globalAuthError}
         />;
       case AppView.FEED:
-        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} />;
+        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} />;
       case AppView.EXPLORE:
-        return <ExploreScreen {...commonScreenProps} onReactToPost={handleReactToPost} />;
+        return <ExploreScreen {...commonScreenProps} onReactToPost={handleReactToPost} onDeletePost={handleDeletePost} />;
       case AppView.REELS:
         return <ReelsScreen {...commonScreenProps} isLoading={isLoadingReels} posts={reelsPosts} onReactToPost={handleReactToPost} />;
       case AppView.CREATE_POST:
@@ -1003,11 +1016,11 @@ const UserApp: React.FC = () => {
       case AppView.CREATE_REEL:
         return <CreateReelScreen {...commonScreenProps} onReelCreated={handleReelCreated} />;
       case AppView.PROFILE:
-        return <ProfileScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} onEditProfile={handleEditProfile} onBlockUser={handleBlockUser} onCurrentUserUpdate={handleCurrentUserUpdate} onPostCreated={handlePostCreated} {...currentView.props} />;
+        return <ProfileScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} onEditProfile={handleEditProfile} onBlockUser={handleBlockUser} onCurrentUserUpdate={handleCurrentUserUpdate} onPostCreated={handlePostCreated} onDeletePost={handleDeletePost} {...currentView.props} />;
       case AppView.SETTINGS:
         return <SettingsScreen {...commonScreenProps} onUpdateSettings={handleUpdateSettings} onUnblockUser={handleUnblockUser} onDeactivateAccount={handleDeactivateAccount} />;
       case AppView.POST_DETAILS:
-        return <PostDetailScreen {...commonScreenProps} onReactToPost={handleReactToPost} onReactToComment={handleReactToComment} onPostComment={handlePostComment} onEditComment={handleEditComment} onDeleteComment={handleDeleteComment} {...currentView.props} />;
+        return <PostDetailScreen {...commonScreenProps} onReactToPost={handleReactToPost} onReactToComment={handleReactToComment} onPostComment={handlePostComment} onEditComment={handleEditComment} onDeleteComment={handleDeleteComment} onDeletePost={handleDeletePost} {...currentView.props} />;
       case AppView.FRIENDS:
         return <FriendsScreen {...commonScreenProps} requests={friendRequests} friends={friends} onOpenConversation={handleOpenConversation} {...currentView.props} />;
       case AppView.SEARCH_RESULTS:
@@ -1051,7 +1064,7 @@ const UserApp: React.FC = () => {
       case AppView.MOBILE_MENU:
         return <MobileMenuScreen currentUser={user} onNavigate={navigate} onLogout={handleLogout} friendRequestCount={friendRequestCount} />;
       default:
-        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} />;
+        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} />;
     }
   };
   
@@ -1238,6 +1251,7 @@ const UserApp: React.FC = () => {
             onPostComment={handlePostComment} 
             onEditComment={handleEditComment} 
             onDeleteComment={handleDeleteComment} 
+            onDeletePost={handleDeletePost}
             onOpenProfile={handleOpenProfile} 
             onSharePost={handleSharePost}
             onOpenCommentsSheet={handleOpenComments}

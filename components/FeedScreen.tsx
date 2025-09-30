@@ -25,6 +25,7 @@ interface FeedScreenProps {
   onAdClick: (post: Post) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
+  onDeletePost: (postId: string) => void;
   
   onCommandProcessed: () => void;
   scrollState: ScrollState;
@@ -38,7 +39,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
     isLoading, posts: initialPosts, currentUser, onSetTtsMessage, lastCommand, onOpenProfile,
     onOpenComments, onReactToPost, onStartCreatePost, onRewardedAdClick, onAdViewed,
     onAdClick, onCommandProcessed, scrollState, onSetScrollState, onNavigate, friends, setSearchResults,
-    onSharePost, onOpenPhotoViewer
+    onSharePost, onOpenPhotoViewer, onDeletePost
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [adInjected, setAdInjected] = useState(false);
@@ -417,6 +418,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                     onAdClick={onAdClick}
                     onSharePost={onSharePost}
                     onOpenPhotoViewer={onOpenPhotoViewer}
+                    onDeletePost={onDeletePost}
                 />
             </div>
         ))}

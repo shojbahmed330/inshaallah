@@ -21,6 +21,7 @@ interface PostDetailScreenProps {
   onPostComment: (postId: string, text: string, parentId?: string | null) => Promise<void>;
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
+  onDeletePost: (postId: string) => void;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
@@ -30,7 +31,7 @@ interface PostDetailScreenProps {
   onGoBack: () => void;
 }
 
-const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments }) => {
+const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments, onDeletePost }) => {
   const [post, setPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -253,6 +254,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
           onAuthorClick={onOpenProfile}
           onSharePost={onSharePost}
           onOpenPhotoViewer={onOpenPhotoViewer}
+          onDeletePost={onDeletePost}
         />
 
         <div className="bg-slate-800/50 rounded-xl p-4">

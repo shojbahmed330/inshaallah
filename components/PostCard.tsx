@@ -479,7 +479,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
                    {isGroupAdmin && (
                       <button onClick={handlePin} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">{isPinned ? 'Unpin Post' : 'Pin Post'}</button>
                    )}
-                   {isAuthor && (
+                   {isAuthor && onDeletePost && (
                        <button onClick={handleDelete} className="w-full text-left px-4 py-2 text-red-500 hover:bg-red-500/10">Delete Post</button>
                    )}
                 </div>
