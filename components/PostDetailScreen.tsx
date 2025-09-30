@@ -60,6 +60,10 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
         } else {
             onSetTtsMessage("This post could not be found.");
             setIsLoading(false);
+            // If the post is deleted while viewing, go back.
+            if (!isInitialLoad.current) {
+                onGoBack();
+            }
         }
 
         if (newlyAddedCommentId) {
@@ -70,7 +74,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
     });
 
     return () => unsubscribe();
-  }, [postId, onSetTtsMessage, language, newlyAddedCommentId]);
+  }, [postId, onSetTtsMessage, language, newlyAddedCommentId, onGoBack]);
 
 
   useEffect(() => {

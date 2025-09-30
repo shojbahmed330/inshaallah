@@ -798,8 +798,11 @@ export const firebaseService = {
 
             const postData = postDoc.data() as Post;
             if (postData.author.id !== userId) {
-                console.error("Permission denied: User is not the author of the post.");
-                return false;
+                const user = await this.getUserProfileById(userId);
+                if (user?.role !== 'admin') {
+                     console.error("Permission denied: User is not the author or an admin.");
+                     return false;
+                }
             }
 
             await deleteDoc(postRef);
@@ -1419,6 +1422,18 @@ export const firebaseService = {
         const q = query(postsRef, where('author.id', '==', userId), orderBy('createdAt', 'desc'));
         const postQuery = await getDocs(q);
         return postQuery.docs.map(docToPost);
+    },
+
+    listenToPostsByUser(userId: string, callback: (posts: Post[]) => void): () => void {
+        const postsRef = collection(db, 'posts');
+        const q = query(postsRef, where('author.id', '==', userId), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const posts = snapshot.docs.map(docToPost);
+            callback(posts);
+        }, (error) => {
+            console.error(`Error listening to posts for user ${userId}:`, error);
+            callback([]);
+        });
     },
     
     async updateProfile(userId: string, updates: Partial<User>): Promise<void> {

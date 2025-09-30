@@ -131,10 +131,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   useEffect(() => {
     if (!profileUser) return;
 
-    const fetchRelatedData = async () => {
-      const userPosts = await firebaseService.getPostsByUser(profileUser.id);
-      setPosts(userPosts);
-      
+    // Switched to a listener to make the posts list reactive to changes (like deletion)
+    const unsubscribePosts = firebaseService.listenToPostsByUser(profileUser.id, (userPosts) => {
+        setPosts(userPosts);
+    });
+
+    const fetchOtherData = async () => {
       if (profileUser.friendIds && profileUser.friendIds.length > 0) {
           const friends = await firebaseService.getUsersByIds(profileUser.friendIds);
           setFriendsList(friends);
@@ -158,7 +160,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       setIsLoading(false); // Stop loading after all related data is fetched
     };
     
-    fetchRelatedData();
+    fetchOtherData();
+
+    return () => {
+        unsubscribePosts();
+    };
     
   }, [profileUser?.id, currentUser.id, language, onSetTtsMessage]);
 
