@@ -1239,8 +1239,8 @@ export const firebaseService = {
             callback(conversations);
         });
     },
-
-    async sendMessage(chatId: string, sender: User, recipient: User, messageContent: any): Promise<void> {
+    
+    async _sendSingleMessage(chatId: string, sender: User, recipient: User, messageContent: any): Promise<void> {
         const chatRef = doc(db, 'chats', chatId);
         const messagesRef = collection(chatRef, 'messages');
         
@@ -1254,34 +1254,21 @@ export const firebaseService = {
         if (messageContent.text) newMessage.text = messageContent.text;
         if (messageContent.duration) newMessage.duration = messageContent.duration;
         if (messageContent.replyTo) newMessage.replyTo = messageContent.replyTo;
-        if (messageContent.mediaUrl) newMessage.mediaUrl = messageContent.mediaUrl; // Added for animated emojis
 
         if (messageContent.mediaFile) {
             const { url } = await uploadMediaToCloudinary(messageContent.mediaFile, `chat_${chatId}_${Date.now()}`);
             newMessage.mediaUrl = url;
-            if(messageContent.type === 'video') {
-                newMessage.type = 'video';
-            } else {
-                newMessage.type = 'image';
-            }
+            newMessage.type = messageContent.mediaFile.type.startsWith('video') ? 'video' : 'image';
         } else if (messageContent.audioBlob) {
             const { url } = await uploadMediaToCloudinary(messageContent.audioBlob, `chat_audio_${chatId}_${Date.now()}.webm`);
             newMessage.audioUrl = url;
             newMessage.type = 'audio';
         }
 
-        const messageWithTimestamp = {
-            ...newMessage,
-            createdAt: serverTimestamp(),
-        };
-        
+        const messageWithTimestamp = { ...newMessage, createdAt: serverTimestamp() };
         const docRef = await addDoc(messagesRef, removeUndefined(messageWithTimestamp));
 
-        const lastMessageForDoc = removeUndefined({
-            ...newMessage,
-            id: docRef.id,
-            createdAt: new Date().toISOString()
-        });
+        const lastMessageForDoc = removeUndefined({ ...newMessage, id: docRef.id, createdAt: new Date().toISOString() });
 
         await setDoc(chatRef, {
             participants: [sender.id, recipient.id],
@@ -1294,6 +1281,35 @@ export const firebaseService = {
             [`unreadCount.${recipient.id}`]: increment(1)
         }, { merge: true });
     },
+
+    async sendMessage(chatId: string, sender: User, recipient: User, messageContent: any): Promise<void> {
+        // First, send the files if any exist
+        if (messageContent.mediaFiles && messageContent.mediaFiles.length > 0) {
+            for (const file of messageContent.mediaFiles) {
+                const fileMessageContent = {
+                    type: file.type.startsWith('video') ? 'video' : 'image',
+                    mediaFile: file,
+                    replyTo: messageContent.replyTo // Carry over reply info to first image
+                };
+                // Send files one by one to preserve order
+                await this._sendSingleMessage(chatId, sender, recipient, fileMessageContent);
+            }
+        }
+        
+        // Then, send the text if it exists
+        if (messageContent.text && messageContent.text.trim()) {
+             const textMessageContent = {
+                type: 'text',
+                text: messageContent.text,
+                replyTo: messageContent.replyTo
+             };
+             await this._sendSingleMessage(chatId, sender, recipient, textMessageContent);
+        } else if (!messageContent.mediaFiles || messageContent.mediaFiles.length === 0) {
+            // If no text and no files, but other content (like audio), send that
+            await this._sendSingleMessage(chatId, sender, recipient, messageContent);
+        }
+    },
+
 
     async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
         const chatRef = doc(db, 'chats', chatId);

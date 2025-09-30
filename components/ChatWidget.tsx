@@ -68,9 +68,13 @@ const ChatWidget: React.FC<ChatWidgetProps> = (props) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isRecording, setIsRecording] = useState(false);
     const [newMessage, setNewMessage] = useState('');
+    const [filesToSend, setFilesToSend] = useState<File[]>([]);
+    const [filePreviews, setFilePreviews] = useState<string[]>([]);
+
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatId = useMemo(() => firebaseService.getChatId(currentUser.id, peerUser.id), [currentUser.id, peerUser.id]);
@@ -86,6 +90,13 @@ const ChatWidget: React.FC<ChatWidgetProps> = (props) => {
             return () => unsubscribe();
         }
     }, [chatId, isMinimized, currentUser.id]);
+    
+    useEffect(() => {
+        // Cleanup previews on unmount
+        return () => {
+            filePreviews.forEach(url => URL.revokeObjectURL(url));
+        }
+    }, [filePreviews]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -94,12 +105,43 @@ const ChatWidget: React.FC<ChatWidgetProps> = (props) => {
     useEffect(() => {
         setIsChatRecording(isRecording);
     }, [isRecording, setIsChatRecording]);
+    
+    const clearInputs = () => {
+        setNewMessage('');
+        setFilesToSend([]);
+        filePreviews.forEach(url => URL.revokeObjectURL(url));
+        setFilePreviews([]);
+        if(fileInputRef.current) fileInputRef.current.value = "";
+    };
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newMessage.trim()) return;
-        await firebaseService.sendMessage(chatId, currentUser, peerUser, { type: 'text', text: newMessage });
-        setNewMessage('');
+        if (!newMessage.trim() && filesToSend.length === 0) return;
+        
+        const messageContent: any = {
+            text: newMessage.trim(),
+            mediaFiles: filesToSend,
+        };
+        
+        await firebaseService.sendMessage(chatId, currentUser, peerUser, messageContent);
+        clearInputs();
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (files) {
+            const newFiles = Array.from(files);
+            setFilesToSend(prev => [...prev, ...newFiles]);
+            // FIX: Explicitly cast file to Blob to resolve a TypeScript type inference issue.
+            const newPreviews = newFiles.map(file => URL.createObjectURL(file as Blob));
+            setFilePreviews(prev => [...prev, ...newPreviews]);
+        }
+    };
+    
+    const removeFile = (indexToRemove: number) => {
+        URL.revokeObjectURL(filePreviews[indexToRemove]);
+        setFilesToSend(prev => prev.filter((_, index) => index !== indexToRemove));
+        setFilePreviews(prev => prev.filter((_, index) => index !== indexToRemove));
     };
     
     const startRecording = useCallback(async () => {
@@ -143,45 +185,57 @@ const ChatWidget: React.FC<ChatWidgetProps> = (props) => {
         );
     }
     
-    const fullScreenClasses = 'relative w-full h-full rounded-none';
-    const widgetClasses = 'fixed bottom-0 right-4 md:relative w-full md:w-80 md:h-[420px] rounded-t-lg md:rounded-lg';
-    
     const containerClasses = isFullScreen
-        ? fullScreenClasses
-        : widgetClasses;
+        ? 'relative w-full h-full rounded-none'
+        : 'fixed inset-0 z-50 md:relative md:w-80 md:h-[420px] rounded-none md:rounded-lg';
     
     return (
         <div className={`${containerClasses} flex flex-col bg-slate-800/80 backdrop-blur-md border border-fuchsia-500/30 shadow-2xl animate-fade-in-fast pointer-events-auto`}>
-            <header className="flex-shrink-0 flex items-center p-2 border-b border-slate-700/50 cursor-pointer" onClick={() => onHeaderClick(peerUser.id)}>
-                 {onGoBack && (
-                    <button onClick={(e) => { e.stopPropagation(); onGoBack(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700 md:hidden">
-                        <Icon name="back" className="w-6 h-6"/>
-                    </button>
-                )}
-                <div className="relative">
+            <header className="flex-shrink-0 flex items-center p-2 border-b border-slate-700/50">
+                 <button onClick={(e) => { e.stopPropagation(); onMinimize(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700 md:hidden">
+                    <Icon name="back" className="w-6 h-6"/>
+                </button>
+                <div className="relative cursor-pointer flex-grow flex items-center gap-2" onClick={() => !isFullScreen && onHeaderClick(peerUser.id)}>
                     <img src={peerUser.avatarUrl} alt={peerUser.name} className="w-9 h-9 rounded-full"/>
-                     {isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-sky-500 rounded-full border-2 border-slate-800"></div>}
+                     {isOnline && <div className="absolute top-7 left-7 w-3 h-3 bg-sky-500 rounded-full border-2 border-slate-800"></div>}
+                    <div className="ml-2">
+                        <p className="font-bold text-slate-100">{peerUser.name}</p>
+                        <p className="text-xs text-slate-400">{isOnline ? 'Online' : 'Offline'}</p>
+                    </div>
                 </div>
-                <div className="ml-2 flex-grow">
-                    <p className="font-bold text-slate-100">{peerUser.name}</p>
-                    <p className="text-xs text-slate-400">{isOnline ? 'Online' : 'Offline'}</p>
+                 <div className="hidden md:flex items-center">
+                    <button onClick={(e) => { e.stopPropagation(); onMinimize(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="minus" className="w-5 h-5"/></button>
+                    <button onClick={(e) => { e.stopPropagation(); onClose(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="close" className="w-5 h-5"/></button>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); onMinimize(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="close" className="w-5 h-5"/></button>
-                <button onClick={(e) => { e.stopPropagation(); onClose(peerUser.id); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="close" className="w-5 h-5"/></button>
             </header>
             <main className="flex-grow overflow-y-auto p-3 space-y-4">
                 {messages.map(msg => <ChatMessage key={msg.id} message={msg} isMe={msg.senderId === currentUser.id} peerAvatar={peerUser.avatarUrl} />)}
                 <div ref={messagesEndRef} />
             </main>
             <footer className="flex-shrink-0 p-2 border-t border-slate-700/50">
+                 {filePreviews.length > 0 && (
+                    <div className="p-2 flex gap-2 overflow-x-auto">
+                        {filePreviews.map((preview, index) => (
+                            <div key={index} className="relative w-16 h-16 flex-shrink-0">
+                                <img src={preview} alt="preview" className="w-full h-full object-cover rounded-md" />
+                                <button onClick={() => removeFile(index)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5">
+                                    <Icon name="close" className="w-3 h-3" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                     <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                     <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-full text-white hover:bg-slate-700">
+                        <Icon name="paper-clip" className="w-5 h-5"/>
+                    </button>
                     <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-grow bg-slate-700 border-slate-600 rounded-full py-2 px-4 focus:ring-fuchsia-500 focus:border-fuchsia-500 text-white"/>
-                    {!newMessage && (
+                    {!newMessage.trim() && filesToSend.length === 0 ? (
                         <button type="button" onMouseDown={startRecording} onMouseUp={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording} className={`p-2.5 rounded-full text-white ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-fuchsia-600'}`}>
                             <Icon name="mic" className="w-5 h-5"/>
                         </button>
-                    )}
-                    {newMessage && (
+                    ) : (
                         <button type="submit" className="p-2.5 rounded-full text-white bg-fuchsia-600">
                              <Icon name="paper-airplane" className="w-5 h-5" />
                         </button>
