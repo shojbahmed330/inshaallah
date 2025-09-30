@@ -687,7 +687,6 @@ export const firebaseService = {
         });
     },
 
-// FIX: Update `createPost` to handle multiple files (`mediaFiles: File[]`) instead of a single file.
     async createPost(
         postData: any,
         media: {
@@ -724,17 +723,26 @@ export const firebaseService = {
                 const { url } = await uploadMediaToCloudinary(media.mediaFiles[0], `post_video_${userId}_${Date.now()}`);
                 postToSave.videoUrl = url;
             } else {
-                // If they are images, upload all of them.
-                const imageUrls = await Promise.all(
-                    media.mediaFiles.map(file => 
+                // If they are images, upload all of them and create imageDetails.
+                const uploadResults = await Promise.all(
+                    media.mediaFiles.map(file =>
                         uploadMediaToCloudinary(file, `post_image_${userId}_${Date.now()}_${Math.random()}`).then(result => result.url)
                     )
                 );
-                postToSave.imageUrls = imageUrls;
-                // For legacy/preview purposes, we can set the first image as the main imageUrl.
-                if (imageUrls.length > 0) {
-                    postToSave.imageUrl = imageUrls[0];
+        
+                const imageCaptions = restOfPostData.imageCaptions || [];
+                postToSave.imageDetails = uploadResults.map((url, index) => ({
+                    id: `img_${Date.now()}_${index}`, // Unique ID for each image
+                    url: url,
+                    caption: imageCaptions[index] || '',
+                }));
+        
+                // For legacy/preview purposes, set the first image as the main imageUrl.
+                if (uploadResults.length > 0) {
+                    postToSave.imageUrl = uploadResults[0];
                 }
+                // Clean up the temporary array passed from create post screen
+                delete postToSave.imageCaptions;
             }
         }
         
@@ -846,6 +854,42 @@ export const firebaseService = {
         }
     },
 
+    async reactToImage(postId: string, imageId: string, userId: string, newReaction: string): Promise<boolean> {
+        const postRef = doc(db, 'posts', postId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const postDoc = await transaction.get(postRef);
+                if (!postDoc.exists()) throw "Post does not exist!";
+
+                const postData = postDoc.data() as Post;
+                const imageReactions = { ...(postData.imageReactions || {}) };
+
+                if (!imageReactions[imageId]) {
+                    imageReactions[imageId] = {};
+                }
+
+                const userPreviousReaction = imageReactions[imageId][userId];
+
+                if (userPreviousReaction === newReaction) {
+                    delete imageReactions[imageId][userId]; // User un-reacted by tapping the same emoji again
+                } else {
+                    imageReactions[imageId][userId] = newReaction;
+                }
+
+                // Clean up empty imageId keys
+                if (Object.keys(imageReactions[imageId]).length === 0) {
+                    delete imageReactions[imageId];
+                }
+
+                transaction.update(postRef, { imageReactions });
+            });
+            return true;
+        } catch (e) {
+            console.error("React to image transaction failed:", e);
+            return false;
+        }
+    },
+
     async reactToComment(postId: string, commentId: string, userId: string, newReaction: string): Promise<boolean> {
         const postRef = doc(db, 'posts', postId);
         const currentUser = await this.getUserProfileById(userId);
@@ -898,7 +942,7 @@ export const firebaseService = {
         }
     },
     
-    async createComment(user: User, postId: string, data: { text?: string; imageFile?: File; audioBlob?: Blob; duration?: number; parentId?: string | null }): Promise<Comment | null> {
+    async createComment(user: User, postId: string, data: { text?: string; imageFile?: File; audioBlob?: Blob; duration?: number; parentId?: string | null; imageId?: string }): Promise<Comment | null> {
         if (user.commentingSuspendedUntil && new Date(user.commentingSuspendedUntil) > new Date()) {
             console.warn(`User ${user.id} is suspended from commenting.`);
             return null;
@@ -913,6 +957,7 @@ export const firebaseService = {
             createdAt: Timestamp.now(),
             reactions: {},
             parentId: data.parentId || null,
+            imageId: data.imageId || null,
         };
     
         if (data.audioBlob && data.duration) {
@@ -2027,21 +2072,13 @@ export const firebaseService = {
     verifyCampaignPayment: async (campaignId, adminId) => true,
     adminUpdateUserProfilePicture: async (userId, base64) => null,
     reactivateUserAsAdmin: async (userId) => true,
-    promoteGroupMember: async (groupId, userToPromote, newRole) => true,
-    demoteGroupMember: async (groupId, userToDemote, oldRole) => true,
-    removeGroupMember: async (groupId, userToRemove) => true,
-    approveJoinRequest: async (groupId, userId) => {
-        // Implementation from ManageGroupScreen logic
-        const user = await this.getUserProfileById(userId);
-        const group = await this.getGroupById(groupId);
-        if (user && group) {
-            await _createNotification(userId, 'group_request_approved', group.creator as User, { groupId, groupName: group.name });
-        }
-        return true;
-    },
-    rejectJoinRequest: async (groupId, userId) => true,
-    approvePost: async (postId) => true,
-    rejectPost: async (postId) => true,
+    promoteGroupMember: async (groupId: string, userToPromote: User, newRole: 'Admin' | 'Moderator') => firebaseService.promoteGroupMember(groupId, userToPromote, newRole),
+    demoteGroupMember: async (groupId: string, userToDemote: User, oldRole: 'Admin' | 'Moderator') => firebaseService.demoteGroupMember(groupId, userToDemote, oldRole),
+    removeGroupMember: async (groupId: string, userToRemove: User) => firebaseService.removeGroupMember(groupId, userToRemove),
+    approveJoinRequest: async (groupId: string, userId: string) => firebaseService.approveJoinRequest(groupId, userId),
+    rejectJoinRequest: async (groupId: string, userId: string) => firebaseService.rejectJoinRequest(groupId, userId),
+    approvePost: async (postId: string) => firebaseService.approvePost(postId),
+    rejectPost: async (postId: string) => firebaseService.rejectPost(postId),
     joinGroup: async (userId, groupId, answers) => {
          const groupRef = doc(db, 'groups', groupId);
          const user = await this.getUserProfileById(userId);

@@ -12,8 +12,9 @@ interface ImageModalProps {
   initialUrl?: string;
   onClose: () => void;
   onReactToPost: (postId: string, emoji: string) => void;
+  onReactToImage: (postId: string, imageId: string, emoji: string) => void;
   onReactToComment: (postId: string, commentId: string, emoji: string) => void;
-  onPostComment: (postId: string, text: string, parentId?: string | null) => Promise<void>;
+  onPostComment: (postId: string, text: string, parentId?: string | null, imageId?: string) => Promise<void>;
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onOpenProfile: (userName: string) => void;
@@ -23,7 +24,7 @@ interface ImageModalProps {
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
-const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToImage, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet }) => {
   if (!post || !post.author) {
     return null;
   }
@@ -40,12 +41,16 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
 
   const isMobile = window.innerWidth < 768;
 
-  const allImages = useMemo(() => {
-    if (post?.imageUrls && post.imageUrls.length > 0) return post.imageUrls;
-    if (post?.imageUrl) return [post.imageUrl];
-    if (post?.newPhotoUrl) return [post.newPhotoUrl];
+  const imageDetails = useMemo(() => {
+    if (post?.imageDetails && post.imageDetails.length > 0) return post.imageDetails;
+    if (post?.imageUrl) return [{ id: 'single_img_placeholder', url: post.imageUrl, caption: undefined }];
+    if (post?.newPhotoUrl) return [{ id: 'profile_cover_placeholder', url: post.newPhotoUrl, caption: post.caption }];
     return [];
   }, [post]);
+
+  const allImages = useMemo(() => imageDetails.map(d => d.url), [imageDetails]);
+  const currentImageDetail = imageDetails[currentIndex];
+  const isMultiImagePost = imageDetails.length > 1;
 
   useEffect(() => {
     if (initialUrl && allImages.length > 0) {
@@ -80,31 +85,32 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
         commentInputRef.current?.focus();
     }
   }, [replyingTo]);
-  
-  // @FIX: Refactored comment threading logic to be safer and satisfy TypeScript.
-  const commentThreads = useMemo(() => {
+
+  const commentsForCurrentImage = useMemo(() => {
     if (!post?.comments) return [];
-
-    const comments = [...post.comments].filter(Boolean).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
+    if (isMultiImagePost && currentImageDetail) {
+        return post.comments.filter(c => c.imageId === currentImageDetail.id);
+    }
+    return post.comments.filter(c => !c.imageId);
+  }, [post?.comments, currentIndex, imageDetails, currentImageDetail, isMultiImagePost]);
+  
+  const commentThreads = useMemo(() => {
+    if (!commentsForCurrentImage) return [];
+    const comments = [...commentsForCurrentImage].filter(Boolean).sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const commentsById = new Map<string, Comment & { replies: Comment[] }>();
     comments.forEach(c => commentsById.set(c.id, { ...c, replies: [] }));
-
     const topLevelComments: (Comment & { replies: Comment[] })[] = [];
-    
     comments.forEach(c => {
         const commentWithReplies = commentsById.get(c.id);
         if (!commentWithReplies) return;
-
         if (c.parentId && commentsById.has(c.parentId)) {
             commentsById.get(c.parentId)?.replies.push(commentWithReplies);
         } else {
             topLevelComments.push(commentWithReplies);
         }
     });
-
     return topLevelComments;
-  }, [post?.comments]);
+  }, [commentsForCurrentImage]);
 
   const handlePlayComment = (comment: Comment) => {
     if (comment.type !== 'audio') return;
@@ -114,9 +120,10 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
   const handlePostCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!post || !newCommentText.trim() || isPostingComment) return;
+    const imageIdForComment = isMultiImagePost ? currentImageDetail?.id : undefined;
     setIsPostingComment(true);
     try {
-        await onPostComment(post.id, newCommentText, replyingTo?.id || null);
+        await onPostComment(post.id, newCommentText, replyingTo?.id || null, imageIdForComment);
         setNewCommentText('');
         setReplyingTo(null);
     } catch (error) {
@@ -139,28 +146,35 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
 
   const handleReaction = (e: React.MouseEvent, emoji: string) => {
       e.stopPropagation();
-      if (post) onReactToPost(post.id, emoji);
+      if (post && isMultiImagePost && currentImageDetail?.id) {
+          onReactToImage(post.id, currentImageDetail.id, emoji);
+      } else if (post) {
+          onReactToPost(post.id, emoji);
+      }
       setPickerOpen(false);
   };
 
-  const myReaction = useMemo(() => {
-    if (!currentUser || !post.reactions) return null;
-    return post.reactions[currentUser.id] || null;
-  }, [currentUser, post.reactions]);
+  const currentReactions = useMemo(() => {
+    if (isMultiImagePost && currentImageDetail?.id) {
+        return post.imageReactions?.[currentImageDetail.id] || {};
+    }
+    return post.reactions || {};
+  }, [post, isMultiImagePost, currentImageDetail]);
 
-  const reactionCount = useMemo(() => {
-    if (!post.reactions) return 0;
-    return Object.keys(post.reactions).length;
-  }, [post.reactions]);
+  const myReaction = useMemo(() => {
+    if (!currentUser) return null;
+    return currentReactions[currentUser.id] || null;
+  }, [currentUser, currentReactions]);
+
+  const reactionCount = useMemo(() => Object.keys(currentReactions).length, [currentReactions]);
 
   const topReactions = useMemo(() => {
-    if (!post.reactions) return [];
     const counts: { [key: string]: number } = {};
-    Object.values(post.reactions).forEach(emoji => {
+    Object.values(currentReactions).forEach(emoji => {
         counts[emoji as string] = (counts[emoji as string] || 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
-  }, [post.reactions]);
+  }, [currentReactions]);
 
   const CommentWithReplies: React.FC<{
     comment: Comment & { replies: Comment[] };
@@ -241,9 +255,10 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
             </div>
           )}
           <img
+            key={allImages[currentIndex]} // Add key to force re-render on image change
             src={allImages[currentIndex]}
             alt="Full screen view"
-            className={`max-w-full max-h-full object-contain rounded-lg transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`}
+            className={`max-w-full max-h-full object-contain rounded-lg transition-opacity animate-fade-in-fast ${isLoading ? 'opacity-50' : 'opacity-100'}`}
           />
 
           {allImages.length > 1 && (
@@ -274,10 +289,15 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
               {post.caption && (
                 <p className="text-slate-200 mt-3"><TaggedContent text={post.caption} onTagClick={onOpenProfile} /></p>
               )}
+              {currentImageDetail?.caption && (
+                  <div className="mt-3 pt-3 border-t border-slate-700">
+                    <p className="text-slate-300 italic">{currentImageDetail.caption}</p>
+                  </div>
+              )}
           </header>
           
           <div className="px-4 py-2 border-b border-slate-700">
-             {(reactionCount > 0 || post.commentCount > 0) && (
+             {(reactionCount > 0 || commentsForCurrentImage.length > 0) && (
                 <div className="flex items-center justify-between py-2">
                     <button onClick={() => setIsReactionModalOpen(true)} className="flex items-center">
                         {topReactions.map(emoji => 
@@ -285,7 +305,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
                         )}
                         <span className="text-sm text-fuchsia-500 ml-2 hover:underline">{reactionCount}</span>
                     </button>
-                    <button onClick={() => isMobile ? onOpenCommentsSheet(post) : commentInputRef.current?.focus()} className="text-sm text-fuchsia-500 hover:underline">{post.commentCount || 0} comments</button>
+                    <button onClick={() => isMobile ? onOpenCommentsSheet(post) : commentInputRef.current?.focus()} className="text-sm text-fuchsia-500 hover:underline">{commentsForCurrentImage.length || 0} comments</button>
                 </div>
               )}
           </div>
@@ -322,7 +342,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
                     {commentThreads.length > 0 ? commentThreads.map(comment => (
                         <CommentWithReplies key={comment.id} comment={comment} />
                     )) : (
-                        <p className="text-center text-slate-500 pt-8">No comments yet.</p>
+                        <p className="text-center text-slate-500 pt-8">No comments yet for this image.</p>
                     )}
                 </div>
 
@@ -361,7 +381,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
         <ReactionListModal
             isOpen={isReactionModalOpen}
             onClose={() => setIsReactionModalOpen(false)}
-            reactions={post.reactions || {}}
+            reactions={currentReactions || {}}
         />
     )}
     </>

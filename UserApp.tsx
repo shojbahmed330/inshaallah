@@ -796,18 +796,23 @@ const UserApp: React.FC = () => {
     }
   };
 
+  const handleReactToImage = async (postId: string, imageId: string, emoji: string) => {
+    if (!user) return;
+    await firebaseService.reactToImage(postId, imageId, user.id, emoji);
+  };
+
   const handleReactToComment = async (postId: string, commentId: string, emoji: string) => {
     if (!user) return;
     await firebaseService.reactToComment(postId, commentId, user.id, emoji);
   };
 
-  const handlePostComment = async (postId: string, text: string, parentId: string | null = null) => {
+  const handlePostComment = async (postId: string, text: string, parentId: string | null = null, imageId?: string) => {
     if (!user || !text.trim()) return;
     if (user.commentingSuspendedUntil && new Date(user.commentingSuspendedUntil) > new Date()) {
         setTtsMessage(getTtsPrompt('comment_suspended', language));
         return;
     }
-    await firebaseService.createComment(user, postId, { text, parentId });
+    await firebaseService.createComment(user, postId, { text, parentId, imageId });
   };
 
   const handleEditComment = async (postId: string, commentId: string, newText: string) => {
@@ -1228,6 +1233,7 @@ const UserApp: React.FC = () => {
             initialUrl={imageViewerInitialUrl || undefined}
             onClose={handleClosePhotoViewer} 
             onReactToPost={handleReactToPost} 
+            onReactToImage={handleReactToImage}
             onReactToComment={handleReactToComment} 
             onPostComment={handlePostComment} 
             onEditComment={handleEditComment} 
@@ -1253,7 +1259,7 @@ const UserApp: React.FC = () => {
             onClose={() => setCommentSheetState(null)}
             onReactToPost={handleReactToPost}
             onReactToComment={handleReactToComment}
-            onPostComment={handlePostComment}
+            onPostComment={(postId, text, parentId) => handlePostComment(postId, text, parentId, undefined)}
             onEditComment={handleEditComment}
             onDeleteComment={handleDeleteComment}
             onOpenProfile={handleOpenProfile}
