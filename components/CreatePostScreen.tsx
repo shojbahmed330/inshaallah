@@ -53,6 +53,7 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
     
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
     const [mediaPreviewUrls, setMediaPreviewUrls] = useState<string[]>([]);
+    const [imageCaptions, setImageCaptions] = useState<string[]>([]);
     const [selectedLayout, setSelectedLayout] = useState<PostImageLayout>('grid');
 
     const [recordingState, setRecordingState] = useState<RecordingState>(RecordingState.IDLE);
@@ -87,6 +88,7 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
         mediaPreviewUrls.forEach(URL.revokeObjectURL);
         setMediaFiles([]);
         setMediaPreviewUrls([]);
+        setImageCaptions([]);
         if (fileInputRef.current) fileInputRef.current.value = "";
     }, [mediaPreviewUrls]);
 
@@ -162,12 +164,18 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
         if (files && files.length > 0) {
             clearAudioRecording();
             const newFiles = Array.from(files);
-            // FIX: Explicitly type `file` as `File` to resolve TS inference issue.
             const newUrls = newFiles.map((file: File) => URL.createObjectURL(file));
             mediaPreviewUrls.forEach(URL.revokeObjectURL);
             setMediaFiles(newFiles);
             setMediaPreviewUrls(newUrls);
+            setImageCaptions(new Array(newFiles.length).fill(''));
         }
+    };
+    
+    const handleImageCaptionChange = (index: number, value: string) => {
+        const newCaptions = [...imageCaptions];
+        newCaptions[index] = value;
+        setImageCaptions(newCaptions);
     };
 
     const handlePost = useCallback(async () => {
@@ -191,6 +199,7 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
                 groupName,
                 duration: hasAudio ? duration : 0,
                 imageLayout: hasMedia ? selectedLayout : undefined,
+                imageCaptions: hasMedia ? imageCaptions : undefined,
             };
             
             await firebaseService.createPost(
@@ -213,7 +222,7 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
             setIsPosting(false);
             if(hasAudio) setRecordingState(RecordingState.PREVIEW);
         }
-    }, [isPosting, caption, currentUser, onSetTtsMessage, onPostCreated, onGoBack, groupId, groupName, feeling, language, recordingState, audioUrl, duration, mediaFiles, selectedLayout]);
+    }, [isPosting, caption, currentUser, onSetTtsMessage, onPostCreated, onGoBack, groupId, groupName, feeling, language, recordingState, audioUrl, duration, mediaFiles, selectedLayout, imageCaptions]);
 
     const handleFeelingSelect = (selected: Feeling) => {
         setFeeling(selected);
@@ -259,11 +268,20 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
 
                 <div className="flex-grow overflow-y-auto px-4 space-y-4">
                     {mediaPreviewUrls.length > 0 && (
-                        <div className="relative group pb-4">
-                            <div className="grid grid-cols-3 gap-2">
-                                {mediaPreviewUrls.map(url => <img key={url} src={url} alt="Post preview" className="aspect-square w-full rounded-lg object-cover" />)}
-                            </div>
-                            <button onClick={clearMediaFiles} className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/80 rounded-full text-white">
+                        <div className="relative group pb-4 space-y-3">
+                             {mediaPreviewUrls.map((url, index) => (
+                                <div key={url} className="flex gap-2 items-start">
+                                    <img src={url} alt={`Post preview ${index + 1}`} className="w-24 h-24 rounded-lg object-cover flex-shrink-0" />
+                                    <textarea
+                                        value={imageCaptions[index]}
+                                        onChange={(e) => handleImageCaptionChange(index, e.target.value)}
+                                        placeholder={`Caption for image ${index + 1}...`}
+                                        rows={3}
+                                        className="w-full bg-slate-700/50 border-slate-600 rounded-lg p-2 text-sm resize-none focus:ring-rose-500 focus:border-rose-500"
+                                    />
+                                </div>
+                             ))}
+                            <button onClick={clearMediaFiles} className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/80 rounded-full text-white text-xs">
                                 Clear All
                             </button>
                         </div>

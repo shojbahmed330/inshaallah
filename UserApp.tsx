@@ -842,7 +842,16 @@ const UserApp: React.FC = () => {
   };
 
   const handleOpenPhotoViewer = (post: Post, initialUrl?: string) => {
-    const allUrls = post.imageUrls || (post.imageUrl ? [post.imageUrl] : []) || (post.newPhotoUrl ? [post.newPhotoUrl] : []);
+    // FIX: Property 'imageUrls' does not exist on type 'Post'. Replaced with 'imageDetails' and corrected logic to correctly select an array of image URLs.
+    let allUrls: string[] = [];
+    if (post.imageDetails && post.imageDetails.length > 0) {
+      allUrls = post.imageDetails.map(detail => detail.url);
+    } else if (post.imageUrl) {
+      allUrls = [post.imageUrl];
+    } else if (post.newPhotoUrl) {
+      allUrls = [post.newPhotoUrl];
+    }
+
     if (allUrls.length === 0) return;
 
     if (viewerPostUnsubscribe.current) {

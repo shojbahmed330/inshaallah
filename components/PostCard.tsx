@@ -39,17 +39,18 @@ const REACTION_COLORS: { [key: string]: string } = {
 };
 
 const ImageGridRenderer: React.FC<{
-    urls: string[];
+    imageDetails: { url: string }[];
     layout: Post['imageLayout'];
     post: Post;
     onOpenPhotoViewer?: (post: Post, initialUrl: string) => void;
-}> = ({ urls, layout, post, onOpenPhotoViewer }) => {
+}> = ({ imageDetails, layout, post, onOpenPhotoViewer }) => {
     
     const handleImageClick = (e: React.MouseEvent, url: string) => {
         e.stopPropagation();
         onOpenPhotoViewer?.(post, url);
     };
 
+    const urls = imageDetails.map(detail => detail.url);
     const totalImages = urls.length;
     if (totalImages > 4) {
         const displayedUrls = urls.slice(0, 4);
@@ -280,8 +281,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
   }
   
   const renderVisualMedia = () => {
-    if (post.imageUrls && post.imageUrls.length > 0) {
-        return <ImageGridRenderer urls={post.imageUrls} layout={post.imageLayout} post={post} onOpenPhotoViewer={onOpenPhotoViewer} />;
+    if (post.imageDetails && post.imageDetails.length > 0) {
+        return <ImageGridRenderer imageDetails={post.imageDetails} layout={post.imageLayout} post={post} onOpenPhotoViewer={onOpenPhotoViewer} />;
     }
 
     if (post.postType === 'profile_picture_change' && post.newPhotoUrl) {

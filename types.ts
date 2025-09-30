@@ -110,6 +110,7 @@ export interface Comment {
   reactions: { [userId: string]: string };
   parentId: string | null;
   isDeleted?: boolean;
+  imageId?: string; // Added for per-image comments
 }
 
 export interface PollOption {
@@ -123,15 +124,16 @@ export interface Post {
   author: Author;
   caption: string;
   createdAt: string;
-  imageUrl?: string;
-  imageUrls?: string[];
+  imageUrl?: string; // Kept for single image posts / backwards compatibility
+  imageDetails?: { id: string; url: string; caption?: string }[];
   imageLayout?: PostImageLayout;
   newPhotoUrl?: string; // For profile/cover photo changes
   imagePrompt?: string;
   videoUrl?: string;
   audioUrl?: string;
   duration: number;
-  reactions: { [userId: string]: string };
+  reactions: { [userId: string]: string }; // Post-level reactions
+  imageReactions?: { [imageId: string]: { [userId: string]: string } }; // Per-image reactions
   commentCount: number;
   comments: Comment[];
   isSponsored?: boolean;
