@@ -186,7 +186,7 @@ const ConversationsScreen: React.FC<ConversationsScreenProps> = ({ currentUser, 
             </div>
             
             {!isMobile && (
-                <main className="flex-grow h-full bg-slate-900 flex items-center justify-center">
+                <main className={`flex-grow h-full bg-slate-900 ${selectedConvo ? '' : 'flex items-center justify-center'}`}>
                     {selectedConvo ? (
                          <div className="w-full h-full animate-fade-scale-in">
                             <ChatWidget 
