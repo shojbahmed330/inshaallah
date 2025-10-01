@@ -190,6 +190,7 @@ export interface Conversation {
   peer: User;
   lastMessage: Message;
   unreadCount: number;
+  isTyping?: boolean;
 }
 
 export interface MusicTrack {

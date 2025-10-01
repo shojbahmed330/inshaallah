@@ -212,6 +212,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<number | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
 
   const chatId = firebaseService.getChatId(currentUser.id, peerUser.id);
   const activeTheme = CHAT_THEMES[settings.theme] || CHAT_THEMES.default;
@@ -273,6 +274,11 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+    }
+    firebaseService.updateTypingStatus(chatId, currentUser.id, false);
+
     if (audioPreview) {
         handleSendMediaMessage({ type: 'audio', audioBlob: audioPreview.blob, duration: audioPreview.duration });
     } else {
@@ -335,6 +341,32 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
       firebaseService.updateChatSettings(chatId, { theme });
       setThemePickerOpen(false);
   }
+
+    useEffect(() => {
+        return () => {
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+            firebaseService.updateTypingStatus(chatId, currentUser.id, false);
+        };
+    }, [chatId, currentUser.id]);
+
+    const handleTextMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const text = e.target.value;
+        setNewMessage(text);
+
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+        }
+
+        if (text.trim().length > 0) {
+            firebaseService.updateTypingStatus(chatId, currentUser.id, true);
+        }
+
+        typingTimeoutRef.current = window.setTimeout(() => {
+            firebaseService.updateTypingStatus(chatId, currentUser.id, false);
+        }, 3000);
+    };
 
   if (isMinimized) {
     return (
@@ -410,7 +442,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
           <div className="flex-grow">
             {recordingState === RecordingState.RECORDING ? (<div className="bg-slate-700 rounded-full h-10 flex items-center px-4 justify-between"><div className="w-1/2 h-full"><Waveform isPlaying={true} isRecording /></div><button onClick={handleStopRecording} className="bg-rose-500 rounded-full p-2"><Icon name="pause" className="w-4 h-4 text-white"/></button></div>
             ) : audioPreview ? (<div className="bg-slate-700 rounded-full h-10 flex items-center px-4 justify-between"><p className="text-sm text-slate-300">Voice message ({audioPreview.duration}s)</p><button onClick={handleCancelRecording} className="p-1"><Icon name="close" className="w-4 h-4 text-slate-400"/></button></div>
-            ) : (<div className="relative"><textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }} placeholder="Aa" rows={1} className={`w-full bg-slate-700 rounded-full py-2 px-4 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm resize-none pr-10 ${activeTheme.text}`} /><button type="button" onClick={() => setEmojiPickerOpen(p => !p)} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-white"><Icon name="face-smile" className="w-5 h-5"/></button></div>)}
+            ) : (<div className="relative"><textarea value={newMessage} onChange={handleTextMessageChange} onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }} placeholder="Aa" rows={1} className={`w-full bg-slate-700 rounded-full py-2 px-4 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-sm resize-none pr-10 ${activeTheme.text}`} /><button type="button" onClick={() => setEmojiPickerOpen(p => !p)} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-white"><Icon name="face-smile" className="w-5 h-5"/></button></div>)}
           </div>
           <button type="submit" className="p-2.5 rounded-full text-fuchsia-400 hover:bg-slate-700/50" disabled={!newMessage.trim() && !audioPreview}><Icon name="paper-airplane" className="w-6 h-6" /></button>
         </form>

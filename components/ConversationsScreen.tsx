@@ -214,7 +214,6 @@ const ConversationsScreen: React.FC<{
   const [searchQuery, setSearchQuery] = useState('');
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const { language } = useSettings();
-  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
 
   const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
   const allRelevantUserIds = useMemo(() => {
@@ -240,29 +239,6 @@ const ConversationsScreen: React.FC<{
         unsubscribes.forEach(unsub => unsub());
     };
   }, [JSON.stringify(allRelevantUserIds)]); // Use JSON.stringify for array dependency
-
-  // Typing indicator simulation
-  useEffect(() => {
-    if (conversations.length > 1) {
-        const timer = setTimeout(() => {
-            const potentialTypers = conversations.filter(c => c.peer.id !== currentUser.id && liveUsers.get(c.peer.id)?.onlineStatus === 'online');
-            if (potentialTypers.length === 0) return;
-
-            const randomConvo = potentialTypers[Math.floor(Math.random() * potentialTypers.length)];
-            
-            setTypingStatus(prev => ({ ...prev, [randomConvo.peer.id]: true }));
-            
-            const stopTypingTimer = setTimeout(() => {
-                setTypingStatus(prev => ({ ...prev, [randomConvo.peer.id]: false }));
-            }, 3000 + Math.random() * 2000);
-
-            return () => clearTimeout(stopTypingTimer);
-
-        }, 5000 + Math.random() * 5000);
-        return () => clearTimeout(timer);
-    }
-  }, [conversations, currentUser.id, liveUsers]);
-
 
   const onlineFriends = useMemo(() => {
     const friends: User[] = [];
@@ -387,7 +363,7 @@ const ConversationsScreen: React.FC<{
               currentUserId={currentUser.id}
               isPinned={pinnedIds.has(conversation.peer.id)}
               isNew={getIsNew(conversation.lastMessage.createdAt)}
-              isTyping={typingStatus[conversation.peer.id] || false}
+              isTyping={conversation.isTyping || false}
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
               onClick={() => onOpenConversation(conversation.peer)}
               onPinToggle={handlePinToggle}

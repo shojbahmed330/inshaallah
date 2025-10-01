@@ -1227,6 +1227,8 @@ export const firebaseService = {
                 const lastMessageData = data.lastMessage;
                 if (!lastMessageData) continue;
                 
+                const isPeerTyping = data.typing?.[peerId] === true;
+
                 conversations.push({
                     peer: peerUser,
                     lastMessage: {
@@ -1234,6 +1236,7 @@ export const firebaseService = {
                         createdAt: lastMessageData.createdAt instanceof Timestamp ? lastMessageData.createdAt.toDate().toISOString() : lastMessageData.createdAt,
                     },
                     unreadCount: data.unreadCount?.[userId] || 0,
+                    isTyping: isPeerTyping,
                 });
             }
             callback(conversations);
@@ -1389,6 +1392,21 @@ export const firebaseService = {
     async updateChatSettings(chatId: string, settings: Partial<ChatSettings>): Promise<void> {
         const settingsRef = doc(db, 'chatSettings', chatId);
         await setDoc(settingsRef, removeUndefined(settings), { merge: true });
+    },
+    async updateTypingStatus(chatId: string, userId: string, isTyping: boolean): Promise<void> {
+        const chatRef = doc(db, 'chats', chatId);
+        try {
+            const updateData = {
+                [`typing.${userId}`]: isTyping
+            };
+            // also update lastUpdated to make sure the conversation bubbles up if needed
+            if(isTyping) {
+                updateData.lastUpdated = serverTimestamp();
+            }
+            await updateDoc(chatRef, updateData);
+        } catch (error) {
+            console.warn(`Could not update typing status for chat ${chatId}:`, error);
+        }
     },
     // --- Profile & Security ---
     async getUserProfile(username: string): Promise<User | null> {
