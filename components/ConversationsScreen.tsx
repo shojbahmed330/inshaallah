@@ -6,14 +6,13 @@ import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
 import { firebaseService } from '../services/firebaseService';
 import {
-    getFirestore, collection, doc, onSnapshot,
-    query, where, documentId, Timestamp
+    doc, onSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 
 
 const SWIPE_THRESHOLD = -70; // Pixels to swipe before it's considered an action
-const SWIPE_ACTION_WIDTH = 80; // Increased width for icon + text
+const SWIPE_ACTION_WIDTH = 80; // Width for each action icon
 
 const docToUser = (doc: any): User => {
     const data = doc.data();
@@ -22,16 +21,12 @@ const docToUser = (doc: any): User => {
         ...data,
     } as User;
     
-    // FIX: Replaced `instanceof Timestamp` with duck-typing to avoid type errors.
-    // The `toDate` method is a reliable way to identify a Firestore Timestamp.
     if (user.createdAt && typeof (user.createdAt as any).toDate === 'function') {
         user.createdAt = (user.createdAt as any).toDate().toISOString();
     }
-    // FIX: Replaced `instanceof Timestamp` with duck-typing to avoid type errors.
     if (user.commentingSuspendedUntil && typeof (user.commentingSuspendedUntil as any).toDate === 'function') {
         user.commentingSuspendedUntil = (user.commentingSuspendedUntil as any).toDate().toISOString();
     }
-     // FIX: Replaced `instanceof Timestamp` with duck-typing to avoid type errors.
      if (user.lastActiveTimestamp && typeof (user.lastActiveTimestamp as any).toDate === 'function') {
         user.lastActiveTimestamp = (user.lastActiveTimestamp as any).toDate().toISOString();
     }
@@ -69,7 +64,9 @@ const ConversationItem: React.FC<{
   style: React.CSSProperties;
   onClick: () => void;
   onPinToggle: (peerId: string) => void;
-}> = ({ conversation, currentUserId, isPinned, isNew, isTyping, style, onClick, onPinToggle }) => {
+  onDelete: (peerId: string) => void;
+  onMute: (peerId: string) => void;
+}> = ({ conversation, currentUserId, isPinned, isNew, isTyping, style, onClick, onPinToggle, onDelete, onMute }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
     // Interaction State
@@ -78,39 +75,29 @@ const ConversationItem: React.FC<{
     const touchStart = useRef({ x: 0, y: 0, time: 0 });
     const isDragging = useRef(false);
     const isSwipingHorizontally = useRef(false);
-    const itemRef = useRef<HTMLDivElement>(null);
     const dragStartSwipeX = useRef(0);
 
-
-    // --- Pointer Event Handlers for Unified Mouse/Touch ---
-
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-        // Only trigger on primary button for mouse
         if (e.pointerType === 'mouse' && e.button !== 0) return;
-
         isDragging.current = true;
         isSwipingHorizontally.current = false;
         touchStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
-        dragStartSwipeX.current = swipeX; // Capture swipe position at drag start
+        dragStartSwipeX.current = swipeX;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     };
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
         if (!isDragging.current) return;
-
         const deltaX = e.clientX - touchStart.current.x;
         const deltaY = e.clientY - touchStart.current.y;
         
-        // Prioritize horizontal swiping
         if (!isSwipingHorizontally.current && Math.abs(deltaX) > Math.abs(deltaY) + 5) {
             isSwipingHorizontally.current = true;
-            // Haptic feedback on swipe start
-            if (navigator.vibrate) navigator.vibrate(1);
+            if (navigator.vibrate) navigator.vibrate(1); // Haptic feedback on swipe start
         }
 
         if (isSwipingHorizontally.current) {
              const newSwipeX = dragStartSwipeX.current + deltaX;
-             // Allow some "bounce" but clamp it
              const clampedSwipeX = Math.max(-SWIPE_ACTION_WIDTH * 3 - 20, Math.min(newSwipeX, 20));
              setSwipeX(clampedSwipeX);
         }
@@ -122,17 +109,14 @@ const ConversationItem: React.FC<{
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
         isDragging.current = false;
 
-        // --- Handle Swipe Snap ---
         if (swipeX < SWIPE_THRESHOLD) {
-            setSwipeX(-SWIPE_ACTION_WIDTH * 3); // Snap open
+            setSwipeX(-SWIPE_ACTION_WIDTH * 3);
         } else {
-            setSwipeX(0); // Snap closed
+            setSwipeX(0);
         }
 
-        // --- Handle Click ---
-        // A click is a short press with minimal movement
         const pressDuration = Date.now() - touchStart.current.time;
-        const movedDistance = Math.sqrt(Math.pow(e.clientX - touchStart.current.x, 2) + Math.pow(e.clientY - touchStart.current.y, 2));
+        const movedDistance = Math.hypot(e.clientX - touchStart.current.x, e.clientY - touchStart.current.y);
 
         if (pressDuration < 250 && movedDistance < 10) {
             onClick();
@@ -140,16 +124,15 @@ const ConversationItem: React.FC<{
     };
     
     const handlePointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
-        if (isDragging.current) {
-            handlePointerUp(e);
-        }
+        if (isDragging.current) handlePointerUp(e);
     };
 
     const handleActionClick = (action: 'pin' | 'mute' | 'delete', e: React.MouseEvent) => {
         e.stopPropagation();
         if (action === 'pin') onPinToggle(peer.id);
-        else alert(`${action.charAt(0).toUpperCase() + action.slice(1)} action clicked.`);
-        setSwipeX(0); // Close swipe menu after action
+        else if (action === 'delete') onDelete(peer.id);
+        else onMute(peer.id);
+        setSwipeX(0);
     };
 
     if (!lastMessage) return null;
@@ -158,7 +141,7 @@ const ConversationItem: React.FC<{
     const isLastMessageFromMe = lastMessage.senderId === currentUserId;
     
     const timeDisplay = peer.onlineStatus === 'online'
-        ? new Date(lastMessage.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        ? new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})
         : formatLastActive(peer.lastActiveTimestamp);
 
     const getSnippet = (message: Message): string => {
@@ -183,21 +166,19 @@ const ConversationItem: React.FC<{
     };
 
     return (
-        <div ref={itemRef} className="w-full relative animate-list-item-slide-in" style={style}>
-            {/* Action buttons revealed on swipe */}
-            <div className="absolute inset-y-0 right-0 flex items-center bg-slate-700 text-white z-0 overflow-hidden" style={{ width: `${-swipeX > 0 ? Math.min(-swipeX, SWIPE_ACTION_WIDTH * 3) : 0}px` }}>
+        <div className="w-full relative animate-list-item-slide-in" style={style}>
+            <div className="absolute inset-y-0 right-0 flex items-center bg-slate-700 text-white z-0 overflow-hidden rounded-r-lg" style={{ width: `${-swipeX > 0 ? Math.min(-swipeX, SWIPE_ACTION_WIDTH * 3) : 0}px` }}>
                 <button onClick={(e) => handleActionClick('pin', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-sky-600 hover:bg-sky-500"><Icon name="pin" className="w-6 h-6"/>{isPinned ? 'Unpin' : 'Pin'}</button>
                 <button onClick={(e) => handleActionClick('mute', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-slate-600 hover:bg-slate-500"><Icon name="bell-slash" className="w-6 h-6"/>Mute</button>
-                <button onClick={(e) => handleActionClick('delete', e)} style={deleteButtonStyle} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500 transition-all"><Icon name="trash" className="w-6 h-6"/>Delete</button>
+                <button onClick={(e) => handleActionClick('delete', e)} style={deleteButtonStyle} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500 transition-all rounded-r-lg"><Icon name="trash" className="w-6 h-6"/>Delete</button>
             </div>
 
-            {/* Main conversation content */}
             <div
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
-                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-all duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : isUnread ? 'bg-slate-700/60' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
+                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-transform duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : isUnread ? 'bg-slate-700/60' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
                 style={{ transform: `translateX(${swipeX}px)` }}
             >
                 <div className="relative flex-shrink-0">
@@ -208,7 +189,7 @@ const ConversationItem: React.FC<{
                 </div>
                 <div className="flex-grow overflow-hidden">
                     <div className="flex justify-between items-baseline">
-                        <p className={`text-lg truncate ${isUnread ? 'text-white font-bold' : 'text-slate-300 font-bold'}`}>{peer.name}</p>
+                        <p className={`text-lg truncate ${isUnread ? 'text-white font-bold' : 'text-slate-300 font-semibold'}`}>{peer.name}</p>
                         <p className={`text-xs flex-shrink-0 ${isUnread ? 'text-fuchsia-400 font-semibold' : 'text-slate-400'}`}>{timeDisplay}</p>
                     </div>
                     <div className="flex justify-between items-start mt-1">
@@ -258,13 +239,13 @@ const ConversationsScreen: React.FC<{
     return () => {
         unsubscribes.forEach(unsub => unsub());
     };
-  }, [allRelevantUserIds]);
+  }, [JSON.stringify(allRelevantUserIds)]); // Use JSON.stringify for array dependency
 
   // Typing indicator simulation
   useEffect(() => {
     if (conversations.length > 1) {
         const timer = setTimeout(() => {
-            const potentialTypers = conversations.filter(c => c.peer.id !== currentUser.id && c.peer.onlineStatus === 'online');
+            const potentialTypers = conversations.filter(c => c.peer.id !== currentUser.id && liveUsers.get(c.peer.id)?.onlineStatus === 'online');
             if (potentialTypers.length === 0) return;
 
             const randomConvo = potentialTypers[Math.floor(Math.random() * potentialTypers.length)];
@@ -273,14 +254,14 @@ const ConversationsScreen: React.FC<{
             
             const stopTypingTimer = setTimeout(() => {
                 setTypingStatus(prev => ({ ...prev, [randomConvo.peer.id]: false }));
-            }, 3000 + Math.random() * 2000); // Type for 3-5 seconds
+            }, 3000 + Math.random() * 2000);
 
             return () => clearTimeout(stopTypingTimer);
 
-        }, 5000 + Math.random() * 5000); // Trigger typing every 5-10 seconds
+        }, 5000 + Math.random() * 5000);
         return () => clearTimeout(timer);
     }
-  }, [conversations, currentUser.id]);
+  }, [conversations, currentUser.id, liveUsers]);
 
 
   const onlineFriends = useMemo(() => {
@@ -310,6 +291,18 @@ const ConversationsScreen: React.FC<{
       }
       return newSet;
     });
+  };
+  
+  const handleDeleteChat = (peerId: string) => {
+    if (window.confirm("Are you sure you want to permanently delete this conversation? This action cannot be undone.")) {
+        const chatId = firebaseService.getChatId(currentUser.id, peerId);
+        firebaseService.deleteChatHistory(chatId);
+        // The real-time listener will update the UI automatically.
+    }
+  };
+
+  const handleMuteChat = (peerId: string) => {
+      alert(`Mute notifications for this user (feature coming soon).`);
   };
   
   const filteredConversations = conversations.filter(c =>
@@ -369,7 +362,7 @@ const ConversationsScreen: React.FC<{
       </header>
       
       {onlineFriends.length > 0 && (
-        <div className="md:hidden px-4 pt-4 flex-shrink-0">
+        <div className="px-4 pt-4 flex-shrink-0">
           <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
             {onlineFriends.map(friend => (
               <button key={friend.id} onClick={() => onOpenConversation(friend)} className="flex flex-col items-center gap-1 w-16 text-center flex-shrink-0">
@@ -398,6 +391,8 @@ const ConversationsScreen: React.FC<{
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
               onClick={() => onOpenConversation(conversation.peer)}
               onPinToggle={handlePinToggle}
+              onDelete={handleDeleteChat}
+              onMute={handleMuteChat}
             />
           ))
         ) : (
