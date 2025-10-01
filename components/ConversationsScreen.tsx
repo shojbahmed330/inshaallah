@@ -7,7 +7,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { firebaseService } from '../services/firebaseService';
 
 const SWIPE_THRESHOLD = -70; // Pixels to swipe before it's considered an action
-const SWIPE_ACTION_WIDTH = 65; // Width of each action button
+const SWIPE_ACTION_WIDTH = 80; // Increased width for icon + text
 
 // Re-engineered ConversationItem to be a stateful, interactive component with unified pointer events
 const ConversationItem: React.FC<{
@@ -30,6 +30,8 @@ const ConversationItem: React.FC<{
     const isDragging = useRef(false);
     const isSwipingHorizontally = useRef(false);
     const itemRef = useRef<HTMLDivElement>(null);
+    const dragStartSwipeX = useRef(0);
+
 
     // --- Pointer Event Handlers for Unified Mouse/Touch ---
 
@@ -40,6 +42,7 @@ const ConversationItem: React.FC<{
         isDragging.current = true;
         isSwipingHorizontally.current = false;
         touchStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+        dragStartSwipeX.current = swipeX; // Capture swipe position at drag start
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
         // Reset any open context menus
@@ -68,16 +71,16 @@ const ConversationItem: React.FC<{
             }
         }
         
-        // Prioritize horizontal swiping and only allow swiping left
+        // Prioritize horizontal swiping
         if (!isSwipingHorizontally.current && Math.abs(deltaX) > Math.abs(deltaY) + 5) {
             isSwipingHorizontally.current = true;
         }
 
         if (isSwipingHorizontally.current) {
-             if (deltaX < 0) {
-                const newSwipeX = Math.max(deltaX, -SWIPE_ACTION_WIDTH * 3 - 20); // Limit swipe distance
-                setSwipeX(newSwipeX);
-            }
+             const newSwipeX = dragStartSwipeX.current + deltaX;
+             // Allow some "bounce" but clamp it
+             const clampedSwipeX = Math.max(-SWIPE_ACTION_WIDTH * 3 - 20, Math.min(newSwipeX, 20));
+             setSwipeX(clampedSwipeX);
         }
     };
 
@@ -147,7 +150,7 @@ const ConversationItem: React.FC<{
     };
     const snippet = getSnippet(lastMessage);
 
-    const actionButtonClasses = "w-[65px] h-full flex items-center justify-center text-white transition-colors";
+    const actionButtonClasses = "w-[80px] h-full flex flex-col items-center justify-center text-white transition-colors text-xs gap-1";
 
     return (
         <div 
@@ -156,9 +159,18 @@ const ConversationItem: React.FC<{
         >
             {/* Swipe Actions */}
             <div className="absolute top-0 right-0 h-full flex">
-                <button title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => handleActionClick('pin', e)} className={`${actionButtonClasses} bg-sky-600 hover:bg-sky-500`}><Icon name="pin" className="w-6 h-6"/></button>
-                <button title="Mute" onClick={(e) => handleActionClick('mute', e)} className={`${actionButtonClasses} bg-indigo-600 hover:bg-indigo-500`}><Icon name="bell-slash" className="w-6 h-6"/></button>
-                <button title="Delete" onClick={(e) => handleActionClick('delete', e)} className={`${actionButtonClasses} bg-red-600 hover:bg-red-500`}><Icon name="trash" className="w-6 h-6"/></button>
+                <button title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => handleActionClick('pin', e)} className={`${actionButtonClasses} bg-sky-600 hover:bg-sky-500`}>
+                    <Icon name="pin" className="w-6 h-6"/>
+                    <span>{isPinned ? 'Unpin' : 'Pin'}</span>
+                </button>
+                <button title="Mute" onClick={(e) => handleActionClick('mute', e)} className={`${actionButtonClasses} bg-indigo-600 hover:bg-indigo-500`}>
+                    <Icon name="bell-slash" className="w-6 h-6"/>
+                    <span>Mute</span>
+                </button>
+                <button title="Delete" onClick={(e) => handleActionClick('delete', e)} className={`${actionButtonClasses} bg-red-600 hover:bg-red-500`}>
+                    <Icon name="trash" className="w-6 h-6"/>
+                    <span>Delete</span>
+                </button>
             </div>
             
             {/* Main Content */}
@@ -324,7 +336,7 @@ const ConversationsScreen: React.FC<any> = ({ currentUser, onOpenConversation, o
                 </>
             ) : (
               <div className="text-center py-20">
-                  <Icon name="message" className="w-16 h-16 mx-auto text-slate-600 mb-4 animate-float" />
+                  <Icon name="message" className="w-16 h-16 mx-auto text-slate-600 animate-float" />
                   <h2 className="text-xl font-bold text-slate-300">No Messages Yet</h2>
                   <p className="text-slate-400 mt-2">When you start a new conversation, it will appear here.</p>
               </div>
