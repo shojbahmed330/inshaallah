@@ -264,18 +264,21 @@ const UserApp: React.FC = () => {
     const unsubscribe = firebaseService.listenToConversations(user.id, (newConvos) => {
         const convoWithNewMessage = newConvos.find(convo => {
             const lastMsg = convo.lastMessage;
-            if (!lastMsg) {
+            if (!lastMsg || !lastMsg.id) {
                 return false;
             }
             
-            // This is a new message if its ID is different from the last one we processed
+            // This check is CRITICAL. We only consider a message "new" for the purpose of auto-opening
+            // a chat if it's from the other person. This stops the sender's client from reacting to its own messages.
+            const isFromPeer = lastMsg.senderId !== user.id;
+            if (!isFromPeer) {
+                return false;
+            }
+
             const previousId = previousLastMessageIdsRef.current.get(convo.peer.id);
             const isTrulyNew = !previousId || previousId !== lastMsg.id;
 
-            // The new message must be from the other person, not from me
-            const isFromPeer = lastMsg.senderId !== user.id;
-
-            return isTrulyNew && isFromPeer;
+            return isTrulyNew;
         });
 
         if (convoWithNewMessage) {
@@ -289,7 +292,7 @@ const UserApp: React.FC = () => {
         
         conversationsRef.current = newConvos;
         newConvos.forEach(c => {
-            if (c.lastMessage) {
+            if (c.lastMessage && c.lastMessage.id) {
                 previousLastMessageIdsRef.current.set(c.peer.id, c.lastMessage.id);
             }
         });

@@ -172,7 +172,7 @@ const MessageBubble: React.FC<{
                             {isActionMenuOpen && (
                                 <div className="absolute bottom-full mb-1 bg-slate-800 rounded-full p-1 flex items-center gap-1 shadow-lg border border-slate-600 z-10">
                                     {EMOJI_REACTIONS.map(emoji => (
-                                        <button key={emoji} onClick={() => { onReact(message.id, emoji); setActionMenuOpen(false); }} className="text-2xl p-1 rounded-full hover:bg-slate-700 transition-transform hover:scale-125">{emoji}</button>
+                                        <button key={emoji} type="button" onClick={() => { onReact(message.id, emoji); setActionMenuOpen(false); }} className="text-2xl p-1 rounded-full hover:bg-slate-700 transition-transform hover:scale-125">{emoji}</button>
                                     ))}
                                     {isMe && <button onClick={() => { onUnsend(message.id); setActionMenuOpen(false); }} className="p-2 rounded-full hover:bg-slate-700"><Icon name="trash" className="w-4 h-4 text-red-400"/></button>}
                                 </div>
