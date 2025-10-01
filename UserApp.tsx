@@ -263,12 +263,9 @@ const UserApp: React.FC = () => {
 
     const unsubscribe = firebaseService.listenToConversations(user.id, (newConvos) => {
         const convoWithNewMessage = newConvos.find(convo => {
-            // Explicitly check for lastMessage existence first.
             if (!convo.lastMessage) {
                 return false;
             }
-            // CRITICAL FIX: Ensure we only react to messages from the PEER, not from the current user.
-            // This prevents the sender's own app from immediately marking the message as read for everyone.
             if (convo.lastMessage.senderId === user.id) {
                 return false;
             }
@@ -281,7 +278,6 @@ const UserApp: React.FC = () => {
             const isAlreadyActive = activeChatsRef.current.some(c => c.id === convoWithNewMessage.peer.id);
             const isMobile = window.innerWidth < 768;
 
-            // Only auto-open if it's NOT the initial load and NOT on a mobile device.
             if (!isAlreadyActive && !isFirstConversationLoad.current && !isMobile) {
                 handleOpenConversation(convoWithNewMessage.peer);
             }
@@ -294,7 +290,6 @@ const UserApp: React.FC = () => {
             }
         });
 
-        // Set this flag to false after the first execution.
         if (isFirstConversationLoad.current) {
             isFirstConversationLoad.current = false;
         }
