@@ -5,9 +5,40 @@ import Icon from './Icon';
 import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
 import { firebaseService } from '../services/firebaseService';
+import {
+    getFirestore, collection, doc, onSnapshot,
+    query, where, documentId, Timestamp
+} from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
+
 
 const SWIPE_THRESHOLD = -70; // Pixels to swipe before it's considered an action
 const SWIPE_ACTION_WIDTH = 80; // Increased width for icon + text
+
+const docToUser = (doc: any): User => {
+    const data = doc.data();
+    const user = {
+        id: doc.id,
+        ...data,
+    } as User;
+    
+    // FIX: Replaced `instanceof Timestamp` with duck-typing to avoid type errors.
+    // The `toDate` method is a reliable way to identify a Firestore Timestamp.
+    if (user.createdAt && typeof (user.createdAt as any).toDate === 'function') {
+        user.createdAt = (user.createdAt as any).toDate().toISOString();
+    }
+    // FIX: Replaced `instanceof Timestamp` with duck-typing to avoid type errors.
+    if (user.commentingSuspendedUntil && typeof (user.commentingSuspendedUntil as any).toDate === 'function') {
+        user.commentingSuspendedUntil = (user.commentingSuspendedUntil as any).toDate().toISOString();
+    }
+     // FIX: Replaced `instanceof Timestamp` with duck-typing to avoid type errors.
+     if (user.lastActiveTimestamp && typeof (user.lastActiveTimestamp as any).toDate === 'function') {
+        user.lastActiveTimestamp = (user.lastActiveTimestamp as any).toDate().toISOString();
+    }
+    
+    return user;
+};
+
 
 // Re-engineered ConversationItem to be a stateful, interactive component with unified pointer events
 const ConversationItem: React.FC<{
@@ -142,78 +173,66 @@ const ConversationItem: React.FC<{
         const prefix = isLastMessageFromMe ? 'You: ' : '';
         switch (message.type) {
             case 'text': return prefix + (message.text || '');
-            case 'image': return prefix + 'Sent an image 📷';
-            case 'video': return prefix + 'Sent a video 📹';
-            case 'audio': return prefix + `Voice message · ${message.duration}s`;
-            default: return prefix + `Voice message · ${message.duration}s`;
+            case 'image': return isLastMessageFromMe ? 'You sent an image 📷' : 'Sent an image 📷';
+            case 'video': return isLastMessageFromMe ? 'You sent a video 📹' : 'Sent a video 📹';
+            case 'audio': return `${prefix}Voice message · ${message.duration}s`;
+            case 'call_history': 
+                const callVerb = message.callStatus === 'missed' ? 'Missed' : 'Declined';
+                return `${callVerb} ${message.callType} call`;
+            default: return '...';
         }
     };
-    const snippet = getSnippet(lastMessage);
-
-    const actionButtonClasses = "w-[80px] h-full flex flex-col items-center justify-center text-white transition-colors text-xs gap-1";
 
     return (
-        <div 
-            style={style}
-            className={`w-full relative overflow-hidden rounded-lg animate-list-item-slide-in ${isNew ? 'animate-glow' : ''}`}
-        >
-            {/* Swipe Actions */}
-            <div className="absolute top-0 right-0 h-full flex">
-                <button title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => handleActionClick('pin', e)} className={`${actionButtonClasses} bg-sky-600 hover:bg-sky-500`}>
-                    <Icon name="pin" className="w-6 h-6"/>
-                    <span>{isPinned ? 'Unpin' : 'Pin'}</span>
-                </button>
-                <button title="Mute" onClick={(e) => handleActionClick('mute', e)} className={`${actionButtonClasses} bg-indigo-600 hover:bg-indigo-500`}>
-                    <Icon name="bell-slash" className="w-6 h-6"/>
-                    <span>Mute</span>
-                </button>
-                <button title="Delete" onClick={(e) => handleActionClick('delete', e)} className={`${actionButtonClasses} bg-red-600 hover:bg-red-500`}>
-                    <Icon name="trash" className="w-6 h-6"/>
-                    <span>Delete</span>
-                </button>
+        <div ref={itemRef} className="w-full relative animate-list-item-slide-in" style={style}>
+            {/* Action buttons revealed on swipe */}
+            <div className="absolute inset-y-0 right-0 flex items-center bg-slate-700 text-white z-0" style={{ width: `${-swipeX > 0 ? Math.min(-swipeX, SWIPE_ACTION_WIDTH * 3) : 0}px` }}>
+                <button onClick={(e) => handleActionClick('pin', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-sky-600 hover:bg-sky-500"><Icon name="pin" className="w-6 h-6"/>{isPinned ? 'Unpin' : 'Pin'}</button>
+                <button onClick={(e) => handleActionClick('mute', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-slate-600 hover:bg-slate-500"><Icon name="bell-slash" className="w-6 h-6"/>Mute</button>
+                <button onClick={(e) => handleActionClick('delete', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500"><Icon name="trash" className="w-6 h-6"/>Delete</button>
             </div>
-            
-            {/* Main Content */}
+
+            {/* Main conversation content */}
             <div
-                ref={itemRef}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
-                className={`w-full text-left p-3 flex items-center gap-4 rounded-lg transition-transform duration-200 ease-out bg-slate-800 active:bg-slate-700 cursor-pointer relative z-10`}
-                style={{ transform: `translateX(${swipeX}px)`, touchAction: 'pan-y' }}
+                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-all duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
+                style={{ transform: `translateX(${swipeX}px)` }}
             >
                 <div className="relative flex-shrink-0">
-                    <img src={peer.avatarUrl} alt={peer.name} className="w-14 h-14 rounded-full" />
-                    <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-slate-900 ${peer.onlineStatus === 'online' ? 'bg-green-500' : 'bg-slate-500'}`}/>
-                    {unreadCount > 0 && <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-fuchsia-500 border-2 border-slate-800" />}
+                    <img src={peer.avatarUrl} alt={peer.name} className="w-16 h-16 rounded-full"/>
+                    <div className={`absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full border-2 ${
+                        peer.onlineStatus === 'online' ? 'bg-green-500 border-slate-900' : 'bg-slate-500 border-slate-800'
+                    }`} />
                 </div>
                 <div className="flex-grow overflow-hidden">
                     <div className="flex justify-between items-baseline">
-                        <p className={`font-bold text-lg truncate ${unreadCount > 0 ? 'text-white' : 'text-slate-200'}`}>{peer.name}</p>
-                        <p className="text-xs text-slate-400 flex-shrink-0">{timeAgo}</p>
+                        <p className={`font-bold text-lg truncate ${unreadCount > 0 ? 'text-slate-100' : 'text-slate-300'}`}>{peer.name}</p>
+                        <p className={`text-xs flex-shrink-0 ${unreadCount > 0 ? 'text-fuchsia-400 font-semibold' : 'text-slate-400'}`}>{timeAgo}</p>
                     </div>
-                    <div className="flex justify-between items-center mt-1">
-                        <p className={`text-sm truncate ${unreadCount > 0 ? 'text-slate-100 font-medium' : 'text-slate-400'}`}>{snippet}</p>
-                        {unreadCount > 0 && (
-                            <span className="flex-shrink-0 ml-4 w-6 h-6 bg-fuchsia-500 text-white text-xs font-bold rounded-full flex items-center justify-center">{unreadCount}</span>
-                        )}
+                    <div className="flex justify-between items-start mt-1">
+                        <p className={`text-sm truncate pr-2 ${unreadCount > 0 ? 'text-slate-300 font-semibold' : 'text-slate-400'}`}>{getSnippet(lastMessage)}</p>
+                        {unreadCount > 0 && <span className="bg-fuchsia-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0">{unreadCount}</span>}
                     </div>
                 </div>
             </div>
-            {/* Long Press Context Menu */}
+            
             {contextMenu && (
-                <div className="fixed inset-0 z-50" onClick={(e) => { e.stopPropagation(); setContextMenu(null); }}>
-                    <div
-                        className="absolute bg-slate-800 border border-slate-600 rounded-lg shadow-2xl z-50 text-white animate-context-menu-fade-in text-sm py-1"
-                        style={{ top: contextMenu.y + 5, left: contextMenu.x + 5 }}
-                        onClick={(e) => e.stopPropagation()}
+                <div 
+                    className="fixed inset-0 z-50"
+                    onPointerUp={() => setContextMenu(null)}
+                >
+                    <div 
+                        className="absolute bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 text-white overflow-hidden animate-context-menu-fade-in w-48 py-1"
+                        style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
                     >
-                        <button onClick={() => handleContextAction('pin')} className="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2"><Icon name="pin" className="w-5 h-5"/> {isPinned ? 'Unpin Chat' : 'Pin Chat'}</button>
-                        <button onClick={() => handleContextAction('read')} className="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2"><Icon name="check-double" className="w-5 h-5"/> Mark as Read</button>
-                        <button onClick={() => handleContextAction('mute')} className="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2"><Icon name="bell-slash" className="w-5 h-5"/> Mute</button>
+                        <button onClick={() => handleContextAction('read')} className="w-full text-left p-2 flex items-center gap-3 hover:bg-slate-700/50">Mark as Read</button>
+                        <button onClick={() => handleContextAction('pin')} className="w-full text-left p-2 flex items-center gap-3 hover:bg-slate-700/50">{isPinned ? 'Unpin' : 'Pin'} Conversation</button>
+                        <button onClick={() => handleContextAction('mute')} className="w-full text-left p-2 flex items-center gap-3 hover:bg-slate-700/50">Mute Notifications</button>
                         <div className="border-t border-slate-700 my-1"></div>
-                        <button onClick={() => handleContextAction('delete')} className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10 flex items-center gap-2"><Icon name="trash" className="w-5 h-5"/> Delete</button>
+                        <button onClick={() => handleContextAction('delete')} className="w-full text-left p-2 flex items-center gap-3 text-red-400 hover:bg-red-500/10">Delete Chat</button>
                     </div>
                 </div>
             )}
@@ -221,161 +240,158 @@ const ConversationItem: React.FC<{
     );
 };
 
-
-const ConversationsScreen: React.FC<any> = ({ currentUser, onOpenConversation, onSetTtsMessage, lastCommand, onCommandProcessed, onGoBack }) => {
+const ConversationsScreen: React.FC<{
+  currentUser: User;
+  onOpenConversation: (peer: User) => void;
+}> = ({ currentUser, onOpenConversation }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [pinnedChats, setPinnedChats] = useState<Set<string>>(new Set());
-  const [newlyUpdatedChatId, setNewlyUpdatedChatId] = useState<string | null>(null);
-  const [scrolled, setScrolled] = useState(false);
-  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, 'online' | 'offline'>>({});
-  
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const { language } = useSettings();
-  const prevConvosRef = useRef<Map<string, string>>(new Map());
-  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
+  const allRelevantUserIds = useMemo(() => {
+    const peerIds = conversations.map(c => c.peer.id);
+    const friendIds = currentUser.friendIds || [];
+    return [...new Set([...peerIds, ...friendIds])];
+  }, [conversations, currentUser.friendIds]);
 
   useEffect(() => {
-    // Load pinned chats from local storage
-    const savedPins = localStorage.getItem(`pinnedChats_${currentUser.id}`);
-    if (savedPins) {
-        setPinnedChats(new Set(JSON.parse(savedPins)));
-    }
+    if (allRelevantUserIds.length === 0) return;
 
-    const unsubscribe = firebaseService.listenToConversations(currentUser.id, (convos) => {
-      setConversations(convos);
-
-      if (isLoading) {
-        onSetTtsMessage(getTtsPrompt('conversations_loaded', language));
-        setIsLoading(false);
-      }
-      
-      convos.forEach(convo => {
-          const prevLastMsgId = prevConvosRef.current.get(convo.peer.id);
-          if (convo.lastMessage && convo.lastMessage.senderId !== currentUser.id && prevLastMsgId !== convo.lastMessage.id) {
-            setNewlyUpdatedChatId(convo.peer.id);
-            setTimeout(() => setNewlyUpdatedChatId(null), 1600);
-          }
-          if (convo.lastMessage) {
-            prevConvosRef.current.set(convo.peer.id, convo.lastMessage.id);
-          }
-      });
+    const unsubscribes = allRelevantUserIds.map(userId => {
+        const userRef = doc(db, 'users', userId);
+        return onSnapshot(userRef, (doc) => {
+            if (doc.exists()) {
+                const user = docToUser(doc);
+                setLiveUsers(prev => new Map(prev).set(userId, user));
+            }
+        });
     });
 
-    return () => unsubscribe();
-  }, [currentUser.id, onSetTtsMessage, language, isLoading]);
-  
-  const peerIds = useMemo(() => conversations.map(c => c.peer.id).sort().join(','), [conversations]);
+    return () => {
+        unsubscribes.forEach(unsub => unsub());
+    };
+  }, [allRelevantUserIds]);
+
+  const onlineFriends = useMemo(() => {
+    const friends: User[] = [];
+    (currentUser.friendIds || []).forEach(friendId => {
+        const user = liveUsers.get(friendId);
+        if (user && user.onlineStatus === 'online') {
+            friends.push(user);
+        }
+    });
+    return friends;
+  }, [liveUsers, currentUser.friendIds]);
+
 
   useEffect(() => {
-      const unsubscribes: (() => void)[] = [];
-      const ids = peerIds ? peerIds.split(',') : [];
+    const unsubscribe = firebaseService.listenToConversations(currentUser.id, setConversations);
+    return () => unsubscribe();
+  }, [currentUser.id]);
 
-      if (ids.length > 0) {
-          ids.forEach(peerId => {
-              // The name `listenToCurrentUser` is a bit of a misnomer, it listens to any user by ID.
-              const unsubscribe = firebaseService.listenToCurrentUser(peerId, (userProfile) => {
-                  if (userProfile) {
-                      setOnlineStatuses(prev => ({
-                          ...prev,
-                          [userProfile.id]: userProfile.onlineStatus,
-                      }));
-                  }
-              });
-              unsubscribes.push(unsubscribe);
-          });
-      }
-      return () => {
-          unsubscribes.forEach(unsub => unsub());
-      };
-  }, [peerIds]);
-
-  const handleScroll = () => {
-    if(scrollRef.current) {
-        setScrolled(scrollRef.current.scrollTop > 20);
-    }
-  }
-  
   const handlePinToggle = (peerId: string) => {
-    const newPins = new Set(pinnedChats);
-    if (newPins.has(peerId)) newPins.delete(peerId);
-    else newPins.add(peerId);
-    setPinnedChats(newPins);
-    localStorage.setItem(`pinnedChats_${currentUser.id}`, JSON.stringify(Array.from(newPins)));
+    setPinnedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(peerId)) {
+        newSet.delete(peerId);
+      } else {
+        newSet.add(peerId);
+      }
+      return newSet;
+    });
+  };
+  
+  const filteredConversations = conversations.filter(c =>
+    c.peer.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  
+  const sortedConversations = useMemo(() => {
+    return [...filteredConversations].sort((a, b) => {
+      const aIsPinned = pinnedIds.has(a.peer.id);
+      const bIsPinned = pinnedIds.has(b.peer.id);
+      if (aIsPinned !== bIsPinned) return aIsPinned ? -1 : 1;
+      return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime();
+    });
+  }, [filteredConversations, pinnedIds]);
+
+  const enrichedConversations = useMemo(() => {
+    return sortedConversations.map(convo => {
+        const liveUser = liveUsers.get(convo.peer.id);
+        if (liveUser) {
+            const enrichedPeer = { ...convo.peer, onlineStatus: liveUser.onlineStatus, lastActiveTimestamp: liveUser.lastActiveTimestamp };
+            return { ...convo, peer: enrichedPeer };
+        }
+        return convo;
+    });
+  }, [sortedConversations, liveUsers]);
+
+
+  const getIsNew = (createdAt: string) => {
+      const messageDate = new Date(createdAt);
+      const now = new Date();
+      return (now.getTime() - messageDate.getTime()) < 3000; // 3 seconds threshold
   };
 
-  const filteredConversations = useMemo(() => {
-    return conversations
-        .map(convo => ({
-            ...convo,
-            peer: {
-                ...convo.peer,
-                onlineStatus: onlineStatuses[convo.peer.id] || convo.peer.onlineStatus || 'offline'
-            }
-        }))
-        .filter(c => c.peer.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [conversations, searchQuery, onlineStatuses]);
-  
-  const pinnedConvos = useMemo(() => {
-    return filteredConversations.filter(c => pinnedChats.has(c.peer.id)).sort((a,b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
-  }, [filteredConversations, pinnedChats]);
-  
-  const recentConvos = useMemo(() => {
-    return filteredConversations.filter(c => !pinnedChats.has(c.peer.id));
-  }, [filteredConversations, pinnedChats]);
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-full"><p className="text-slate-300 text-xl">Loading conversations...</p></div>;
-  }
-
   return (
-    <div className="h-full w-full flex flex-col bg-slate-900">
-      <header className={`sticky top-0 z-20 flex-shrink-0 px-4 pt-4 transition-all duration-300 ${scrolled ? 'bg-slate-900/80 backdrop-blur-md pb-2' : 'pb-0'}`}>
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <h1 className={`font-bold text-slate-100 transition-all duration-300 ${scrolled ? 'text-xl' : 'text-3xl'}`}>Messages</h1>
-            {!scrolled && <button className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"><Icon name="edit" className="w-6 h-6" /></button>}
-        </div>
-        <div className={`max-w-4xl mx-auto transition-all duration-300 ${scrolled ? 'h-14 pt-2' : 'h-16 pt-4'}`}>
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"><Icon name="search" className="w-5 h-5 text-slate-400"/></div>
-                <input type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search messages..." className="w-full bg-slate-800 border border-slate-700 rounded-full py-2 pl-10 pr-4 focus:ring-2 focus:ring-fuchsia-500 focus:outline-none placeholder:text-slate-400"/>
-            </div>
-        </div>
+    <div className="h-full w-full flex flex-col">
+      <header className="flex-shrink-0 p-4 border-b border-fuchsia-500/20 bg-black/30 backdrop-blur-sm z-10">
+        <h1 className="text-3xl font-bold text-slate-100 mb-4">Messages</h1>
+        <form className="relative">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+            <svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
+              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
+            </svg>
+          </div>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search conversations..."
+            className="bg-slate-800 border border-slate-700 text-slate-100 text-base rounded-full focus:ring-fuchsia-500 focus:border-fuchsia-500 block w-full pl-11 p-3 transition"
+          />
+        </form>
       </header>
-
-      <div ref={scrollRef} onScroll={handleScroll} className="h-full w-full overflow-y-auto">
-        <div className="max-w-4xl mx-auto p-4 space-y-6">
-            {filteredConversations.length > 0 ? (
-                <>
-                    {pinnedConvos.length > 0 && (
-                        <section>
-                            <h2 className="text-xs font-bold uppercase text-fuchsia-400/80 tracking-wider mb-2 px-2">Pinned</h2>
-                            <div className="flex flex-col gap-2">
-                                {pinnedConvos.map((convo, i) => (
-                                    <ConversationItem key={convo.peer.id} conversation={convo} currentUserId={currentUser.id} isPinned={true} onPinToggle={handlePinToggle} isNew={newlyUpdatedChatId === convo.peer.id} onClick={() => onOpenConversation(convo.peer)} style={{ animationDelay: `${i * 50}ms` }} />
-                                ))}
-                            </div>
-                        </section>
-                    )}
-                    {recentConvos.length > 0 && (
-                        <section>
-                            {pinnedConvos.length > 0 && <h2 className="text-xs font-bold uppercase text-fuchsia-400/80 tracking-wider mb-2 px-2">Recent</h2>}
-                            <div className="flex flex-col gap-2">
-                                {recentConvos.map((convo, i) => (
-                                    <ConversationItem key={convo.peer.id} conversation={convo} currentUserId={currentUser.id} isPinned={false} onPinToggle={handlePinToggle} isNew={newlyUpdatedChatId === convo.peer.id} onClick={() => onOpenConversation(convo.peer)} style={{ animationDelay: `${(i + pinnedConvos.length) * 50}ms` }}/>
-                                ))}
-                            </div>
-                        </section>
-                    )}
-                </>
-            ) : (
-              <div className="text-center py-20">
-                  <Icon name="message" className="w-16 h-16 mx-auto text-slate-600 animate-float" />
-                  <h2 className="text-xl font-bold text-slate-300">No Messages Yet</h2>
-                  <p className="text-slate-400 mt-2">When you start a new conversation, it will appear here.</p>
-              </div>
-            )}
+      
+      {onlineFriends.length > 0 && (
+        <div className="md:hidden px-4 pt-4 flex-shrink-0">
+          <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+            {onlineFriends.map(friend => (
+              <button key={friend.id} onClick={() => onOpenConversation(friend)} className="flex flex-col items-center gap-1 w-16 text-center flex-shrink-0">
+                <div className="relative">
+                  <img src={friend.avatarUrl} alt={friend.name} className="w-14 h-14 rounded-full" />
+                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900"></div>
+                </div>
+                <p className="text-xs text-slate-300 truncate w-full">{friend.name.split(' ')[0]}</p>
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-fuchsia-500/10 my-2"></div>
         </div>
+      )}
+
+      <div className="flex-grow overflow-y-auto p-4 space-y-3">
+        {enrichedConversations.length > 0 ? (
+          enrichedConversations.map((conversation, index) => (
+            <ConversationItem
+              key={conversation.peer.id}
+              conversation={conversation}
+              currentUserId={currentUser.id}
+              isPinned={pinnedIds.has(conversation.peer.id)}
+              isNew={getIsNew(conversation.lastMessage.createdAt)}
+              style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
+              onClick={() => onOpenConversation(conversation.peer)}
+              onPinToggle={handlePinToggle}
+            />
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center">
+            <Icon name="message" className="w-16 h-16 mb-4 opacity-50" />
+            <p className="text-xl font-semibold">No conversations yet</p>
+            <p>Start a chat with a friend to see it here.</p>
+          </div>
+        )}
       </div>
     </div>
   );
