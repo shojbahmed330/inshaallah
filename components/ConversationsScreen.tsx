@@ -39,6 +39,25 @@ const docToUser = (doc: any): User => {
     return user;
 };
 
+const formatLastActive = (isoString?: string): string => {
+    if (!isoString) return '';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '';
+        const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+        if (seconds < 60) return 'now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days === 1) return 'yesterday';
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch {
+        return '';
+    }
+};
+
 
 // Re-engineered ConversationItem to be a stateful, interactive component with unified pointer events
 const ConversationItem: React.FC<{
@@ -46,10 +65,11 @@ const ConversationItem: React.FC<{
   currentUserId: string;
   isPinned: boolean;
   isNew: boolean;
+  isTyping: boolean;
   style: React.CSSProperties;
   onClick: () => void;
   onPinToggle: (peerId: string) => void;
-}> = ({ conversation, currentUserId, isPinned, isNew, style, onClick, onPinToggle }) => {
+}> = ({ conversation, currentUserId, isPinned, isNew, isTyping, style, onClick, onPinToggle }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
     // Interaction State
@@ -84,6 +104,8 @@ const ConversationItem: React.FC<{
         // Prioritize horizontal swiping
         if (!isSwipingHorizontally.current && Math.abs(deltaX) > Math.abs(deltaY) + 5) {
             isSwipingHorizontally.current = true;
+            // Haptic feedback on swipe start
+            if (navigator.vibrate) navigator.vibrate(1);
         }
 
         if (isSwipingHorizontally.current) {
@@ -132,8 +154,13 @@ const ConversationItem: React.FC<{
 
     if (!lastMessage) return null;
 
+    const isUnread = unreadCount > 0;
     const isLastMessageFromMe = lastMessage.senderId === currentUserId;
-    const timeAgo = new Date(lastMessage.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    
+    const timeDisplay = peer.onlineStatus === 'online'
+        ? new Date(lastMessage.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : formatLastActive(peer.lastActiveTimestamp);
+
     const getSnippet = (message: Message): string => {
         if (message.isDeleted) return isLastMessageFromMe ? "You unsent a message" : "Unsent a message";
         const prefix = isLastMessageFromMe ? 'You: ' : '';
@@ -148,6 +175,12 @@ const ConversationItem: React.FC<{
             default: return '...';
         }
     };
+    
+    const deleteSwipeProgress = Math.max(0, Math.min(1, (-swipeX - (SWIPE_ACTION_WIDTH * 2)) / SWIPE_ACTION_WIDTH));
+    const deleteButtonStyle = {
+        boxShadow: `0 0 ${deleteSwipeProgress * 20}px rgba(220, 38, 38, 0.8)`,
+        transform: `scale(${1 + deleteSwipeProgress * 0.1})`,
+    };
 
     return (
         <div ref={itemRef} className="w-full relative animate-list-item-slide-in" style={style}>
@@ -155,7 +188,7 @@ const ConversationItem: React.FC<{
             <div className="absolute inset-y-0 right-0 flex items-center bg-slate-700 text-white z-0 overflow-hidden" style={{ width: `${-swipeX > 0 ? Math.min(-swipeX, SWIPE_ACTION_WIDTH * 3) : 0}px` }}>
                 <button onClick={(e) => handleActionClick('pin', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-sky-600 hover:bg-sky-500"><Icon name="pin" className="w-6 h-6"/>{isPinned ? 'Unpin' : 'Pin'}</button>
                 <button onClick={(e) => handleActionClick('mute', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-slate-600 hover:bg-slate-500"><Icon name="bell-slash" className="w-6 h-6"/>Mute</button>
-                <button onClick={(e) => handleActionClick('delete', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500"><Icon name="trash" className="w-6 h-6"/>Delete</button>
+                <button onClick={(e) => handleActionClick('delete', e)} style={deleteButtonStyle} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500 transition-all"><Icon name="trash" className="w-6 h-6"/>Delete</button>
             </div>
 
             {/* Main conversation content */}
@@ -164,7 +197,7 @@ const ConversationItem: React.FC<{
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
-                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-all duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
+                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-all duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : isUnread ? 'bg-slate-700/60' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
                 style={{ transform: `translateX(${swipeX}px)` }}
             >
                 <div className="relative flex-shrink-0">
@@ -175,12 +208,16 @@ const ConversationItem: React.FC<{
                 </div>
                 <div className="flex-grow overflow-hidden">
                     <div className="flex justify-between items-baseline">
-                        <p className={`font-bold text-lg truncate ${unreadCount > 0 ? 'text-slate-100' : 'text-slate-300'}`}>{peer.name}</p>
-                        <p className={`text-xs flex-shrink-0 ${unreadCount > 0 ? 'text-fuchsia-400 font-semibold' : 'text-slate-400'}`}>{timeAgo}</p>
+                        <p className={`text-lg truncate ${isUnread ? 'text-white font-bold' : 'text-slate-300 font-bold'}`}>{peer.name}</p>
+                        <p className={`text-xs flex-shrink-0 ${isUnread ? 'text-fuchsia-400 font-semibold' : 'text-slate-400'}`}>{timeDisplay}</p>
                     </div>
                     <div className="flex justify-between items-start mt-1">
-                        <p className={`text-sm truncate pr-2 ${unreadCount > 0 ? 'text-slate-300 font-semibold' : 'text-slate-400'}`}>{getSnippet(lastMessage)}</p>
-                        {unreadCount > 0 && <span className="bg-fuchsia-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0">{unreadCount}</span>}
+                        {isTyping ? (
+                            <p className="text-sm truncate pr-2 text-fuchsia-400 italic animate-pulse">typing...</p>
+                        ) : (
+                            <p className={`text-sm truncate pr-2 ${isUnread ? 'text-slate-200 font-semibold' : 'text-slate-400'}`}>{getSnippet(lastMessage)}</p>
+                        )}
+                        {isUnread && <span className="bg-fuchsia-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center flex-shrink-0">{unreadCount}</span>}
                     </div>
                 </div>
             </div>
@@ -196,6 +233,7 @@ const ConversationsScreen: React.FC<{
   const [searchQuery, setSearchQuery] = useState('');
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const { language } = useSettings();
+  const [typingStatus, setTypingStatus] = useState<Record<string, boolean>>({});
 
   const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
   const allRelevantUserIds = useMemo(() => {
@@ -221,6 +259,29 @@ const ConversationsScreen: React.FC<{
         unsubscribes.forEach(unsub => unsub());
     };
   }, [allRelevantUserIds]);
+
+  // Typing indicator simulation
+  useEffect(() => {
+    if (conversations.length > 1) {
+        const timer = setTimeout(() => {
+            const potentialTypers = conversations.filter(c => c.peer.id !== currentUser.id && c.peer.onlineStatus === 'online');
+            if (potentialTypers.length === 0) return;
+
+            const randomConvo = potentialTypers[Math.floor(Math.random() * potentialTypers.length)];
+            
+            setTypingStatus(prev => ({ ...prev, [randomConvo.peer.id]: true }));
+            
+            const stopTypingTimer = setTimeout(() => {
+                setTypingStatus(prev => ({ ...prev, [randomConvo.peer.id]: false }));
+            }, 3000 + Math.random() * 2000); // Type for 3-5 seconds
+
+            return () => clearTimeout(stopTypingTimer);
+
+        }, 5000 + Math.random() * 5000); // Trigger typing every 5-10 seconds
+        return () => clearTimeout(timer);
+    }
+  }, [conversations, currentUser.id]);
+
 
   const onlineFriends = useMemo(() => {
     const friends: User[] = [];
@@ -277,9 +338,14 @@ const ConversationsScreen: React.FC<{
 
 
   const getIsNew = (createdAt: string) => {
-      const messageDate = new Date(createdAt);
-      const now = new Date();
-      return (now.getTime() - messageDate.getTime()) < 3000; // 3 seconds threshold
+      try {
+        const messageDate = new Date(createdAt);
+        if(isNaN(messageDate.getTime())) return false;
+        const now = new Date();
+        return (now.getTime() - messageDate.getTime()) < 5000; // 5 seconds threshold
+      } catch {
+        return false;
+      }
   };
 
   return (
@@ -328,6 +394,7 @@ const ConversationsScreen: React.FC<{
               currentUserId={currentUser.id}
               isPinned={pinnedIds.has(conversation.peer.id)}
               isNew={getIsNew(conversation.lastMessage.createdAt)}
+              isTyping={typingStatus[conversation.peer.id] || false}
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
               onClick={() => onOpenConversation(conversation.peer)}
               onPinToggle={handlePinToggle}
