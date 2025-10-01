@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, Conversation, AppView, Message } from '../types';
-import { geminiService } from '../services/geminiService';
 import Icon from './Icon';
-import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
 import { firebaseService } from '../services/firebaseService';
 import {
@@ -290,7 +288,10 @@ const ConversationsScreen: React.FC<{
       const aIsPinned = pinnedIds.has(a.peer.id);
       const bIsPinned = pinnedIds.has(b.peer.id);
       if (aIsPinned !== bIsPinned) return aIsPinned ? -1 : 1;
-      return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime();
+      // Handle cases where lastMessage or createdAt might be missing
+      const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+      const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+      return timeB - timeA;
     });
   }, [filteredConversations, pinnedIds]);
 
@@ -308,6 +309,7 @@ const ConversationsScreen: React.FC<{
 
   const getIsNew = (createdAt: string) => {
       try {
+        if (!createdAt) return false;
         const messageDate = new Date(createdAt);
         if(isNaN(messageDate.getTime())) return false;
         const now = new Date();
@@ -362,7 +364,7 @@ const ConversationsScreen: React.FC<{
               conversation={conversation}
               currentUserId={currentUser.id}
               isPinned={pinnedIds.has(conversation.peer.id)}
-              isNew={getIsNew(conversation.lastMessage.createdAt)}
+              isNew={getIsNew(conversation.lastMessage?.createdAt)}
               isTyping={conversation.isTyping || false}
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
               onClick={() => onOpenConversation(conversation.peer)}
