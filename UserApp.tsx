@@ -263,9 +263,16 @@ const UserApp: React.FC = () => {
 
     const unsubscribe = firebaseService.listenToConversations(user.id, (newConvos) => {
         const convoWithNewMessage = newConvos.find(convo => {
-            if (!convo.lastMessage || convo.lastMessage.senderId === user.id) {
+            // Explicitly check for lastMessage existence first.
+            if (!convo.lastMessage) {
                 return false;
             }
+            // CRITICAL FIX: Ensure we only react to messages from the PEER, not from the current user.
+            // This prevents the sender's own app from immediately marking the message as read for everyone.
+            if (convo.lastMessage.senderId === user.id) {
+                return false;
+            }
+            
             const previousId = previousLastMessageIdsRef.current.get(convo.peer.id);
             return !previousId || previousId !== convo.lastMessage.id;
         });

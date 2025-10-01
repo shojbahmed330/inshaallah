@@ -240,11 +240,19 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
   }, [chatId]);
 
   useEffect(() => {
+    // Scroll to bottom when new messages arrive and the widget is open.
     if (!isMinimized) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+
+    // CRITICAL FIX: Only mark messages as read if the chat is open AND the last message is from the peer.
+    // This prevents the sender's own sent message from causing the conversation to be marked as read immediately.
+    if (!isMinimized && lastMessage && lastMessage.senderId !== currentUser.id) {
       firebaseService.markMessagesAsRead(chatId, currentUser.id);
     }
-  }, [messages, isMinimized, chatId, currentUser.id]);
+}, [messages, isMinimized, chatId, currentUser.id]);
   
   const handleSendTextMessage = async () => {
     const trimmedMessage = newMessage.trim();
