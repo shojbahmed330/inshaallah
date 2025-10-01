@@ -229,6 +229,7 @@ const ConversationsScreen: React.FC<any> = ({ currentUser, onOpenConversation, o
   const [pinnedChats, setPinnedChats] = useState<Set<string>>(new Set());
   const [newlyUpdatedChatId, setNewlyUpdatedChatId] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, 'online' | 'offline'>>({});
   
   const { language } = useSettings();
   const prevConvosRef = useRef<Map<string, string>>(new Map());
@@ -264,6 +265,31 @@ const ConversationsScreen: React.FC<any> = ({ currentUser, onOpenConversation, o
     return () => unsubscribe();
   }, [currentUser.id, onSetTtsMessage, language, isLoading]);
   
+  const peerIds = useMemo(() => conversations.map(c => c.peer.id).sort().join(','), [conversations]);
+
+  useEffect(() => {
+      const unsubscribes: (() => void)[] = [];
+      const ids = peerIds ? peerIds.split(',') : [];
+
+      if (ids.length > 0) {
+          ids.forEach(peerId => {
+              // The name `listenToCurrentUser` is a bit of a misnomer, it listens to any user by ID.
+              const unsubscribe = firebaseService.listenToCurrentUser(peerId, (userProfile) => {
+                  if (userProfile) {
+                      setOnlineStatuses(prev => ({
+                          ...prev,
+                          [userProfile.id]: userProfile.onlineStatus,
+                      }));
+                  }
+              });
+              unsubscribes.push(unsubscribe);
+          });
+      }
+      return () => {
+          unsubscribes.forEach(unsub => unsub());
+      };
+  }, [peerIds]);
+
   const handleScroll = () => {
     if(scrollRef.current) {
         setScrolled(scrollRef.current.scrollTop > 20);
@@ -279,8 +305,16 @@ const ConversationsScreen: React.FC<any> = ({ currentUser, onOpenConversation, o
   };
 
   const filteredConversations = useMemo(() => {
-    return conversations.filter(c => c.peer.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [conversations, searchQuery]);
+    return conversations
+        .map(convo => ({
+            ...convo,
+            peer: {
+                ...convo.peer,
+                onlineStatus: onlineStatuses[convo.peer.id] || convo.peer.onlineStatus || 'offline'
+            }
+        }))
+        .filter(c => c.peer.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [conversations, searchQuery, onlineStatuses]);
   
   const pinnedConvos = useMemo(() => {
     return filteredConversations.filter(c => pinnedChats.has(c.peer.id)).sort((a,b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
