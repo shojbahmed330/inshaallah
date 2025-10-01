@@ -6,10 +6,10 @@ import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
 import { firebaseService } from '../services/firebaseService';
 
-const SWIPE_THRESHOLD = -80;
-const SWIPE_ACTION_WIDTH = 70;
+const SWIPE_THRESHOLD = -70; // Pixels to swipe before it's considered an action
+const SWIPE_ACTION_WIDTH = 65; // Width of each action button
 
-// Re-engineered ConversationItem to be a stateful, interactive component
+// Re-engineered ConversationItem to be a stateful, interactive component with unified pointer events
 const ConversationItem: React.FC<{
   conversation: Conversation;
   currentUserId: string;
@@ -21,65 +21,116 @@ const ConversationItem: React.FC<{
 }> = ({ conversation, currentUserId, isPinned, isNew, style, onClick, onPinToggle }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
-    // Swipe and Long Press State
+    // Interaction State
     const [swipeX, setSwipeX] = useState(0);
-    const [isSwiped, setIsSwiped] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
-    const swipeRef = useRef<HTMLDivElement>(null);
+    
     const touchStart = useRef({ x: 0, y: 0, time: 0 });
     const longPressTimeout = useRef<number | null>(null);
+    const isDragging = useRef(false);
+    const isSwipingHorizontally = useRef(false);
+    const itemRef = useRef<HTMLDivElement>(null);
 
-    const handleTouchStart = (e: React.TouchEvent) => {
-        touchStart.current = { x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY, time: Date.now() };
-        setIsSwiped(false);
-        
+    // --- Pointer Event Handlers for Unified Mouse/Touch ---
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        // Only trigger on primary button for mouse
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        isDragging.current = true;
+        isSwipingHorizontally.current = false;
+        touchStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
+        // Reset any open context menus
+        if (contextMenu) setContextMenu(null);
+
+        // Set up a long press timer
         longPressTimeout.current = window.setTimeout(() => {
-            setContextMenu({ x: e.targetTouches[0].clientX, y: e.targetTouches[0].clientY });
-            longPressTimeout.current = null;
+            if (isDragging.current) { // Check if pointer is still down without significant movement
+                setContextMenu({ x: e.clientX, y: e.clientY });
+                isDragging.current = false; // Prevent click from firing after long press
+            }
         }, 500);
     };
 
-    const handleTouchMove = (e: React.TouchEvent) => {
-        const deltaX = e.targetTouches[0].clientX - touchStart.current.x;
-        const deltaY = Math.abs(e.targetTouches[0].clientY - touchStart.current.y);
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDragging.current) return;
 
-        if (Math.abs(deltaX) > deltaY + 10) { // Prioritize horizontal movement for swipe
-             if (longPressTimeout.current) clearTimeout(longPressTimeout.current);
-             if (deltaX < 0 && deltaX > SWIPE_THRESHOLD * 2.5) {
-                setSwipeX(deltaX);
+        const deltaX = e.clientX - touchStart.current.x;
+        const deltaY = e.clientY - touchStart.current.y;
+
+        // If the pointer moves more than a small threshold, cancel the long press
+        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+            if (longPressTimeout.current) {
+                clearTimeout(longPressTimeout.current);
+                longPressTimeout.current = null;
             }
-        } else {
-             if (longPressTimeout.current) clearTimeout(longPressTimeout.current);
+        }
+        
+        // Prioritize horizontal swiping and only allow swiping left
+        if (!isSwipingHorizontally.current && Math.abs(deltaX) > Math.abs(deltaY) + 5) {
+            isSwipingHorizontally.current = true;
+        }
+
+        if (isSwipingHorizontally.current) {
+             if (deltaX < 0) {
+                const newSwipeX = Math.max(deltaX, -SWIPE_ACTION_WIDTH * 3 - 20); // Limit swipe distance
+                setSwipeX(newSwipeX);
+            }
         }
     };
 
-    const handleTouchEnd = () => {
-        if (longPressTimeout.current) clearTimeout(longPressTimeout.current);
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDragging.current) return;
 
-        if (swipeX < SWIPE_THRESHOLD) {
-            setSwipeX(-SWIPE_ACTION_WIDTH * 3);
-            setIsSwiped(true);
-        } else {
-            setSwipeX(0);
-            setIsSwiped(false);
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        isDragging.current = false;
+
+        // Clear long press timer if it hasn't fired
+        if (longPressTimeout.current) {
+            clearTimeout(longPressTimeout.current);
+            longPressTimeout.current = null;
         }
 
+        // --- Handle Swipe Snap ---
+        if (swipeX < SWIPE_THRESHOLD) {
+            setSwipeX(-SWIPE_ACTION_WIDTH * 3); // Snap open
+        } else {
+            setSwipeX(0); // Snap closed
+        }
+
+        // --- Handle Click ---
+        // A click is a short press with minimal movement
         const pressDuration = Date.now() - touchStart.current.time;
-        if (pressDuration < 200 && Math.abs(swipeX) < 10 && !contextMenu) {
+        const movedDistance = Math.sqrt(Math.pow(e.clientX - touchStart.current.x, 2) + Math.pow(e.clientY - touchStart.current.y, 2));
+
+        if (pressDuration < 250 && movedDistance < 10 && !contextMenu) {
             onClick();
+        }
+    };
+    
+    const handlePointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (isDragging.current) {
+            handlePointerUp(e);
         }
     };
 
     const handleActionClick = (action: 'pin' | 'mute' | 'delete', e: React.MouseEvent) => {
         e.stopPropagation();
         if (action === 'pin') onPinToggle(peer.id);
-        // Mute and Delete are placeholders for now
         else alert(`${action.charAt(0).toUpperCase() + action.slice(1)} action clicked.`);
-        setSwipeX(0);
-        setIsSwiped(false);
+        setSwipeX(0); // Close swipe menu after action
     };
 
-    if (!lastMessage) return null; // Simplified: Don't show empty conversations for now
+    const handleContextAction = (action: 'pin' | 'mute' | 'delete' | 'read') => {
+        if (action === 'pin') onPinToggle(peer.id);
+        else alert(`${action} action clicked.`);
+        setContextMenu(null);
+    };
+
+
+    if (!lastMessage) return null;
 
     const isLastMessageFromMe = lastMessage.senderId === currentUserId;
     const timeAgo = new Date(lastMessage.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -96,7 +147,7 @@ const ConversationItem: React.FC<{
     };
     const snippet = getSnippet(lastMessage);
 
-    const actionButtonClasses = "w-[70px] h-full flex flex-col items-center justify-center text-white font-semibold transition-colors";
+    const actionButtonClasses = "w-[65px] h-full flex items-center justify-center text-white transition-colors";
 
     return (
         <div 
@@ -105,19 +156,20 @@ const ConversationItem: React.FC<{
         >
             {/* Swipe Actions */}
             <div className="absolute top-0 right-0 h-full flex">
-                <button onClick={(e) => handleActionClick('pin', e)} className={`${actionButtonClasses} bg-sky-600 hover:bg-sky-500`}><Icon name="pin" className="w-6 h-6"/>{isPinned ? 'Unpin' : 'Pin'}</button>
-                <button onClick={(e) => handleActionClick('mute', e)} className={`${actionButtonClasses} bg-indigo-600 hover:bg-indigo-500`}><Icon name="bell-slash" className="w-6 h-6"/>Mute</button>
-                <button onClick={(e) => handleActionClick('delete', e)} className={`${actionButtonClasses} bg-red-600 hover:bg-red-500`}><Icon name="trash" className="w-6 h-6"/>Delete</button>
+                <button title={isPinned ? 'Unpin' : 'Pin'} onClick={(e) => handleActionClick('pin', e)} className={`${actionButtonClasses} bg-sky-600 hover:bg-sky-500`}><Icon name="pin" className="w-6 h-6"/></button>
+                <button title="Mute" onClick={(e) => handleActionClick('mute', e)} className={`${actionButtonClasses} bg-indigo-600 hover:bg-indigo-500`}><Icon name="bell-slash" className="w-6 h-6"/></button>
+                <button title="Delete" onClick={(e) => handleActionClick('delete', e)} className={`${actionButtonClasses} bg-red-600 hover:bg-red-500`}><Icon name="trash" className="w-6 h-6"/></button>
             </div>
             
             {/* Main Content */}
             <div
-                ref={swipeRef}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                className={`w-full text-left p-3 flex items-center gap-4 rounded-lg transition-transform duration-200 ease-out bg-slate-800/80 active:bg-slate-700/80`}
-                style={{ transform: `translateX(${swipeX}px)` }}
+                ref={itemRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerLeave}
+                className={`w-full text-left p-3 flex items-center gap-4 rounded-lg transition-transform duration-200 ease-out bg-slate-800 active:bg-slate-700 cursor-pointer relative z-10`}
+                style={{ transform: `translateX(${swipeX}px)`, touchAction: 'pan-y' }}
             >
                 <div className="relative flex-shrink-0">
                     <img src={peer.avatarUrl} alt={peer.name} className="w-14 h-14 rounded-full" />
@@ -139,16 +191,17 @@ const ConversationItem: React.FC<{
             </div>
             {/* Long Press Context Menu */}
             {contextMenu && (
-                <div className="fixed inset-0 z-50" onClick={() => setContextMenu(null)}>
+                <div className="fixed inset-0 z-50" onClick={(e) => { e.stopPropagation(); setContextMenu(null); }}>
                     <div
-                        className="absolute bg-slate-800 border border-slate-600 rounded-lg shadow-2xl z-50 text-white animate-context-menu-fade-in text-sm"
-                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        className="absolute bg-slate-800 border border-slate-600 rounded-lg shadow-2xl z-50 text-white animate-context-menu-fade-in text-sm py-1"
+                        style={{ top: contextMenu.y + 5, left: contextMenu.x + 5 }}
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <button onClick={() => onPinToggle(peer.id)} className="w-full text-left px-4 py-2 hover:bg-slate-700">Pin Chat</button>
-                        <button className="w-full text-left px-4 py-2 hover:bg-slate-700">Mute Notifications</button>
-                        <button className="w-full text-left px-4 py-2 hover:bg-slate-700">Mark as Read</button>
+                        <button onClick={() => handleContextAction('pin')} className="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2"><Icon name="pin" className="w-5 h-5"/> {isPinned ? 'Unpin Chat' : 'Pin Chat'}</button>
+                        <button onClick={() => handleContextAction('read')} className="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2"><Icon name="check-double" className="w-5 h-5"/> Mark as Read</button>
+                        <button onClick={() => handleContextAction('mute')} className="w-full text-left px-4 py-2 hover:bg-slate-700 flex items-center gap-2"><Icon name="bell-slash" className="w-5 h-5"/> Mute</button>
                         <div className="border-t border-slate-700 my-1"></div>
-                        <button className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10">Delete Chat</button>
+                        <button onClick={() => handleContextAction('delete')} className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10 flex items-center gap-2"><Icon name="trash" className="w-5 h-5"/> Delete</button>
                     </div>
                 </div>
             )}
@@ -218,7 +271,7 @@ const ConversationsScreen: React.FC<any> = ({ currentUser, onOpenConversation, o
   }, [conversations, searchQuery]);
   
   const pinnedConvos = useMemo(() => {
-    return filteredConversations.filter(c => pinnedChats.has(c.peer.id));
+    return filteredConversations.filter(c => pinnedChats.has(c.peer.id)).sort((a,b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime());
   }, [filteredConversations, pinnedChats]);
   
   const recentConvos = useMemo(() => {
