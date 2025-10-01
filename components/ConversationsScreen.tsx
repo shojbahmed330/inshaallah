@@ -38,7 +38,7 @@ const formatLastActive = (isoString?: string): string => {
         const date = new Date(isoString);
         if (isNaN(date.getTime())) return '';
         const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-        if (seconds < 60) return 'now';
+        if (seconds < 60) return 'Just now';
         const minutes = Math.floor(seconds / 60);
         if (minutes < 60) return `${minutes}m ago`;
         const hours = Math.floor(minutes / 60);
@@ -135,8 +135,8 @@ const ConversationItem: React.FC<{
 
     if (!lastMessage) return null;
 
-    const isUnread = unreadCount > 0;
     const isLastMessageFromMe = lastMessage.senderId === currentUserId;
+    const isUnread = unreadCount > 0 && !isLastMessageFromMe;
     
     const timeDisplay = peer.onlineStatus === 'online'
         ? new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})
@@ -214,6 +214,9 @@ const ConversationsScreen: React.FC<{
   const { language } = useSettings();
 
   const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
+  const lastMessageIdsRef = useRef(new Map<string, string>());
+  const [newlyUpdatedConvoId, setNewlyUpdatedConvoId] = useState<string | null>(null);
+
   const allRelevantUserIds = useMemo(() => {
     const peerIds = conversations.map(c => c.peer.id);
     const friendIds = currentUser.friendIds || [];
@@ -251,9 +254,35 @@ const ConversationsScreen: React.FC<{
 
 
   useEffect(() => {
-    const unsubscribe = firebaseService.listenToConversations(currentUser.id, setConversations);
+    let isInitialLoad = true;
+    const unsubscribe = firebaseService.listenToConversations(currentUser.id, (newConversations) => {
+        let newConvoFound = null;
+        if (!isInitialLoad) {
+            newConvoFound = newConversations.find(convo => {
+                const lastMsg = convo.lastMessage;
+                if (!lastMsg || lastMsg.senderId === currentUser.id) return false;
+                const prevMsgId = lastMessageIdsRef.current.get(convo.peer.id);
+                return prevMsgId !== lastMsg.id;
+            });
+        }
+        
+        newConversations.forEach(convo => {
+            if (convo.lastMessage) {
+                lastMessageIdsRef.current.set(convo.peer.id, convo.lastMessage.id);
+            }
+        });
+        
+        if (newConvoFound) {
+            setNewlyUpdatedConvoId(newConvoFound.peer.id);
+            setTimeout(() => setNewlyUpdatedConvoId(null), 1500); // Duration of glow animation
+        }
+
+        setConversations(newConversations);
+        isInitialLoad = false;
+    });
+
     return () => unsubscribe();
-  }, [currentUser.id]);
+}, [currentUser.id]);
 
   const handlePinToggle = (peerId: string) => {
     setPinnedIds(prev => {
@@ -306,19 +335,6 @@ const ConversationsScreen: React.FC<{
     });
   }, [sortedConversations, liveUsers]);
 
-
-  const getIsNew = (createdAt: string) => {
-      try {
-        if (!createdAt) return false;
-        const messageDate = new Date(createdAt);
-        if(isNaN(messageDate.getTime())) return false;
-        const now = new Date();
-        return (now.getTime() - messageDate.getTime()) < 5000; // 5 seconds threshold
-      } catch {
-        return false;
-      }
-  };
-
   return (
     <div className="h-full w-full flex flex-col">
       <header className="flex-shrink-0 p-4 border-b border-fuchsia-500/20 bg-black/30 backdrop-blur-sm z-10">
@@ -364,7 +380,7 @@ const ConversationsScreen: React.FC<{
               conversation={conversation}
               currentUserId={currentUser.id}
               isPinned={pinnedIds.has(conversation.peer.id)}
-              isNew={getIsNew(conversation.lastMessage?.createdAt)}
+              isNew={conversation.peer.id === newlyUpdatedConvoId}
               isTyping={conversation.isTyping || false}
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
               onClick={() => onOpenConversation(conversation.peer)}
