@@ -54,10 +54,8 @@ const ConversationItem: React.FC<{
     
     // Interaction State
     const [swipeX, setSwipeX] = useState(0);
-    const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
     
     const touchStart = useRef({ x: 0, y: 0, time: 0 });
-    const longPressTimeout = useRef<number | null>(null);
     const isDragging = useRef(false);
     const isSwipingHorizontally = useRef(false);
     const itemRef = useRef<HTMLDivElement>(null);
@@ -75,17 +73,6 @@ const ConversationItem: React.FC<{
         touchStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
         dragStartSwipeX.current = swipeX; // Capture swipe position at drag start
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
-        // Reset any open context menus
-        if (contextMenu) setContextMenu(null);
-
-        // Set up a long press timer
-        longPressTimeout.current = window.setTimeout(() => {
-            if (isDragging.current) { // Check if pointer is still down without significant movement
-                setContextMenu({ x: e.clientX, y: e.clientY });
-                isDragging.current = false; // Prevent click from firing after long press
-            }
-        }, 500);
     };
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -93,14 +80,6 @@ const ConversationItem: React.FC<{
 
         const deltaX = e.clientX - touchStart.current.x;
         const deltaY = e.clientY - touchStart.current.y;
-
-        // If the pointer moves more than a small threshold, cancel the long press
-        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-            if (longPressTimeout.current) {
-                clearTimeout(longPressTimeout.current);
-                longPressTimeout.current = null;
-            }
-        }
         
         // Prioritize horizontal swiping
         if (!isSwipingHorizontally.current && Math.abs(deltaX) > Math.abs(deltaY) + 5) {
@@ -121,12 +100,6 @@ const ConversationItem: React.FC<{
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
         isDragging.current = false;
 
-        // Clear long press timer if it hasn't fired
-        if (longPressTimeout.current) {
-            clearTimeout(longPressTimeout.current);
-            longPressTimeout.current = null;
-        }
-
         // --- Handle Swipe Snap ---
         if (swipeX < SWIPE_THRESHOLD) {
             setSwipeX(-SWIPE_ACTION_WIDTH * 3); // Snap open
@@ -139,7 +112,7 @@ const ConversationItem: React.FC<{
         const pressDuration = Date.now() - touchStart.current.time;
         const movedDistance = Math.sqrt(Math.pow(e.clientX - touchStart.current.x, 2) + Math.pow(e.clientY - touchStart.current.y, 2));
 
-        if (pressDuration < 250 && movedDistance < 10 && !contextMenu) {
+        if (pressDuration < 250 && movedDistance < 10) {
             onClick();
         }
     };
@@ -156,13 +129,6 @@ const ConversationItem: React.FC<{
         else alert(`${action.charAt(0).toUpperCase() + action.slice(1)} action clicked.`);
         setSwipeX(0); // Close swipe menu after action
     };
-
-    const handleContextAction = (action: 'pin' | 'mute' | 'delete' | 'read') => {
-        if (action === 'pin') onPinToggle(peer.id);
-        else alert(`${action} action clicked.`);
-        setContextMenu(null);
-    };
-
 
     if (!lastMessage) return null;
 
@@ -218,24 +184,6 @@ const ConversationItem: React.FC<{
                     </div>
                 </div>
             </div>
-            
-            {contextMenu && (
-                <div 
-                    className="fixed inset-0 z-50"
-                    onPointerUp={() => setContextMenu(null)}
-                >
-                    <div 
-                        className="absolute bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 text-white overflow-hidden animate-context-menu-fade-in w-48 py-1"
-                        style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-                    >
-                        <button onClick={() => handleContextAction('read')} className="w-full text-left p-2 flex items-center gap-3 hover:bg-slate-700/50">Mark as Read</button>
-                        <button onClick={() => handleContextAction('pin')} className="w-full text-left p-2 flex items-center gap-3 hover:bg-slate-700/50">{isPinned ? 'Unpin' : 'Pin'} Conversation</button>
-                        <button onClick={() => handleContextAction('mute')} className="w-full text-left p-2 flex items-center gap-3 hover:bg-slate-700/50">Mute Notifications</button>
-                        <div className="border-t border-slate-700 my-1"></div>
-                        <button onClick={() => handleContextAction('delete')} className="w-full text-left p-2 flex items-center gap-3 text-red-400 hover:bg-red-500/10">Delete Chat</button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
