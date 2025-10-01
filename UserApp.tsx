@@ -259,19 +259,23 @@ const UserApp: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    isFirstConversationLoad.current = true; 
+    isFirstConversationLoad.current = true;
 
     const unsubscribe = firebaseService.listenToConversations(user.id, (newConvos) => {
         const convoWithNewMessage = newConvos.find(convo => {
-            if (!convo.lastMessage) {
-                return false;
-            }
-            if (convo.lastMessage.senderId === user.id) {
+            const lastMsg = convo.lastMessage;
+            if (!lastMsg) {
                 return false;
             }
             
+            // This is a new message if its ID is different from the last one we processed
             const previousId = previousLastMessageIdsRef.current.get(convo.peer.id);
-            return !previousId || previousId !== convo.lastMessage.id;
+            const isTrulyNew = !previousId || previousId !== lastMsg.id;
+
+            // The new message must be from the other person, not from me
+            const isFromPeer = lastMsg.senderId !== user.id;
+
+            return isTrulyNew && isFromPeer;
         });
 
         if (convoWithNewMessage) {

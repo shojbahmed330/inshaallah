@@ -239,16 +239,26 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
     };
   }, [chatId]);
 
+  // Effect for auto-scrolling to the bottom of the chat
   useEffect(() => {
-    if (!isMinimized) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-    if (!isMinimized && lastMessage && lastMessage.senderId !== currentUser.id) {
-      firebaseService.markMessagesAsRead(chatId, currentUser.id);
-    }
-}, [messages, isMinimized, chatId, currentUser.id]);
+      if (!isMinimized) {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+  }, [messages, isMinimized]);
+  
+  // Effect for marking messages as read. This is the critical fix.
+  useEffect(() => {
+      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  
+      // We only mark messages as read if:
+      // 1. The chat window is open (!isMinimized).
+      // 2. There is at least one message.
+      // 3. The last message was sent by the OTHER person (the peer).
+      // This prevents the sender's own app from marking the message as read for the receiver.
+      if (!isMinimized && lastMessage && lastMessage.senderId === peerUser.id) {
+          firebaseService.markMessagesAsRead(chatId, currentUser.id);
+      }
+  }, [messages, isMinimized, chatId, currentUser.id, peerUser.id]);
   
   const handleSendTextMessage = async () => {
     const trimmedMessage = newMessage.trim();
