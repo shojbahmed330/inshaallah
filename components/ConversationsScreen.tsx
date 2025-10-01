@@ -140,12 +140,41 @@ const ConversationItem: React.FC<{
     const isUnread = unreadCount > 0 && !isLastMessageFromMe;
     
     const isNew = isUnread && lastMessage && !animatedMessageIds.has(lastMessage.id);
-
-    const handleLocalAnimationEnd = () => {
-        if (lastMessage) {
-            onAnimationEnd(lastMessage.id);
+    
+    useEffect(() => {
+        let timer: number;
+        if (isNew) {
+            // After the animation duration, mark it as "seen" for animation purposes.
+            timer = window.setTimeout(() => {
+                if (lastMessage) {
+                    onAnimationEnd(lastMessage.id);
+                }
+            }, 2000); // Animation is 1.5s, give it a bit more time.
         }
-    };
+        return () => {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        };
+    }, [isNew, onAnimationEnd, lastMessage]);
+
+    const itemClasses = useMemo(() => {
+        const base = 'w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-all duration-200 ease-out touch-pan-y border-l-4';
+        let stateClasses = '';
+
+        if (isPinned) {
+            stateClasses = 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50 border-fuchsia-500';
+        } else if (isUnread) {
+            stateClasses = 'bg-fuchsia-900/40 border-fuchsia-500';
+        } else {
+            stateClasses = 'bg-slate-800/50 border-transparent';
+        }
+
+        const animationClass = isNew ? 'animate-glow' : '';
+
+        return `${base} ${stateClasses} ${animationClass}`;
+    }, [isPinned, isUnread, isNew]);
+
 
     const timeDisplay = peer.onlineStatus === 'online'
         ? new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})
@@ -185,8 +214,7 @@ const ConversationItem: React.FC<{
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
-                onAnimationEnd={isNew ? handleLocalAnimationEnd : undefined}
-                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-transform duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : isUnread ? 'bg-slate-700/60' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
+                className={itemClasses}
                 style={{ transform: `translateX(${swipeX}px)` }}
             >
                 <div className="relative flex-shrink-0">
