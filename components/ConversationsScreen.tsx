@@ -57,14 +57,15 @@ const ConversationItem: React.FC<{
   conversation: Conversation;
   currentUserId: string;
   isPinned: boolean;
-  isNew: boolean;
   isTyping: boolean;
   style: React.CSSProperties;
+  animatedMessageIds: Set<string>;
+  onAnimationEnd: (messageId: string) => void;
   onClick: () => void;
   onPinToggle: (peerId: string) => void;
   onDelete: (peerId: string) => void;
   onMute: (peerId: string) => void;
-}> = ({ conversation, currentUserId, isPinned, isNew, isTyping, style, onClick, onPinToggle, onDelete, onMute }) => {
+}> = ({ conversation, currentUserId, isPinned, isTyping, style, animatedMessageIds, onAnimationEnd, onClick, onPinToggle, onDelete, onMute }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
     // Interaction State
@@ -138,6 +139,14 @@ const ConversationItem: React.FC<{
     const isLastMessageFromMe = lastMessage.senderId === currentUserId;
     const isUnread = unreadCount > 0 && !isLastMessageFromMe;
     
+    const isNew = isUnread && lastMessage && !animatedMessageIds.has(lastMessage.id);
+
+    const handleLocalAnimationEnd = () => {
+        if (lastMessage) {
+            onAnimationEnd(lastMessage.id);
+        }
+    };
+
     const timeDisplay = peer.onlineStatus === 'online'
         ? new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})
         : formatLastActive(peer.lastActiveTimestamp);
@@ -176,6 +185,7 @@ const ConversationItem: React.FC<{
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
+                onAnimationEnd={isNew ? handleLocalAnimationEnd : undefined}
                 className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-transform duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : isUnread ? 'bg-slate-700/60' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
                 style={{ transform: `translateX(${swipeX}px)` }}
             >
@@ -214,8 +224,16 @@ const ConversationsScreen: React.FC<{
   const { language } = useSettings();
 
   const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
-  const lastMessageIdsRef = useRef(new Map<string, string>());
-  const [newlyUpdatedConvoId, setNewlyUpdatedConvoId] = useState<string | null>(null);
+  const [animatedMessageIds, setAnimatedMessageIds] = useState(new Set<string>());
+
+  const handleAnimationEnd = useCallback((messageId: string) => {
+    setAnimatedMessageIds(prev => {
+        if (prev.has(messageId)) return prev;
+        const newSet = new Set(prev);
+        newSet.add(messageId);
+        return newSet;
+    });
+  }, []);
 
   const allRelevantUserIds = useMemo(() => {
     const peerIds = conversations.map(c => c.peer.id);
@@ -254,31 +272,8 @@ const ConversationsScreen: React.FC<{
 
 
   useEffect(() => {
-    let isInitialLoad = true;
     const unsubscribe = firebaseService.listenToConversations(currentUser.id, (newConversations) => {
-        let newConvoFound = null;
-        if (!isInitialLoad) {
-            newConvoFound = newConversations.find(convo => {
-                const lastMsg = convo.lastMessage;
-                if (!lastMsg || lastMsg.senderId === currentUser.id) return false;
-                const prevMsgId = lastMessageIdsRef.current.get(convo.peer.id);
-                return prevMsgId !== lastMsg.id;
-            });
-        }
-        
-        newConversations.forEach(convo => {
-            if (convo.lastMessage) {
-                lastMessageIdsRef.current.set(convo.peer.id, convo.lastMessage.id);
-            }
-        });
-        
-        if (newConvoFound) {
-            setNewlyUpdatedConvoId(newConvoFound.peer.id);
-            setTimeout(() => setNewlyUpdatedConvoId(null), 1500); // Duration of glow animation
-        }
-
         setConversations(newConversations);
-        isInitialLoad = false;
     });
 
     return () => unsubscribe();
@@ -380,9 +375,10 @@ const ConversationsScreen: React.FC<{
               conversation={conversation}
               currentUserId={currentUser.id}
               isPinned={pinnedIds.has(conversation.peer.id)}
-              isNew={conversation.peer.id === newlyUpdatedConvoId}
               isTyping={conversation.isTyping || false}
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
+              animatedMessageIds={animatedMessageIds}
+              onAnimationEnd={handleAnimationEnd}
               onClick={() => onOpenConversation(conversation.peer)}
               onPinToggle={handlePinToggle}
               onDelete={handleDeleteChat}
