@@ -268,7 +268,6 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Replaced `Array.from(set)` with spread syntax `[...set]` to resolve TypeScript error where `Array.from` was incorrectly inferred as returning `unknown[]` instead of `string[]`.
       await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
   };
 
@@ -300,7 +299,6 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Replaced `Array.from(set)` with spread syntax `[...set]` to resolve TypeScript error where `Array.from` was incorrectly inferred as returning `unknown[]` instead of `string[]`.
       updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
   };
   
@@ -341,7 +339,10 @@ const ConversationsScreen: React.FC<{
     if (!searchQuery.trim()) return { visibleConversations: baseList, newChatResults: [] };
 
     const lowerQuery = searchQuery.toLowerCase();
-    const filteredConvos = baseList.filter(c => c.peer.name.toLowerCase().includes(lowerQuery));
+    const filteredConvos = baseList.filter(c =>
+        c.peer.name.toLowerCase().includes(lowerQuery) ||
+        (c.lastMessage?.text && c.lastMessage.text.toLowerCase().includes(lowerQuery))
+    );
 
     const existingPeerIds = new Set(conversations.map(c => c.peer.id));
     const newChats = friends.filter(f =>
@@ -363,7 +364,7 @@ const ConversationsScreen: React.FC<{
             {showArchived ? 'Inbox' : 'Archived'}
           </button>
         </div>
-        <form className="relative">
+        <form className="relative" onSubmit={(e) => e.preventDefault()}>
           <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
             <svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/></svg>
           </div>
@@ -401,7 +402,7 @@ const ConversationsScreen: React.FC<{
             <p className="text-xl font-semibold">
               {searchQuery ? 'No results found' : showArchived ? 'No archived chats' : 'No conversations yet'}
             </p>
-            <p>{searchQuery ? 'Try a different name.' : 'Start a chat with a friend to see it here.'}</p>
+            <p>{searchQuery ? 'Try a different name or message text.' : 'Start a chat with a friend to see it here.'}</p>
           </div>
         )}
       </div>
