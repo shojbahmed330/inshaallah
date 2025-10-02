@@ -501,10 +501,10 @@ export const geminiService = {
     async getCategorizedExploreFeed(userId: string): Promise<CategorizedExploreFeed> {
         const posts = await firebaseService.getExplorePosts(userId);
         if (posts.length === 0) {
-            return { trending: [], forYou: [], questions: [], funnyVoiceNotes: [], newTalent: [] };
+            return { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
         }
 
-        const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'questions', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. 
+        const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. 
         
         CRITICAL INSTRUCTIONS FOR 'forYou' CATEGORY:
         1.  Create a diverse and engaging feed. It should be a MIX of content types: image posts, short videos (posts with a 'videoUrl'), and interesting audio notes.
@@ -513,7 +513,7 @@ export const geminiService = {
 
         General Rules:
         - 'trending' should be based on high engagement (reactions/comments).
-        - 'questions' are posts that ask a question in their caption.
+        - 'recent' are the 5-10 most recent posts based on their 'createdAt' timestamp.
         - 'funnyVoiceNotes' are audio posts that seem humorous from their caption.
         - 'newTalent' are posts from newer users or with unique content.`;
 
@@ -529,11 +529,11 @@ export const geminiService = {
                         properties: {
                             trending: { type: Type.ARRAY, items: { type: Type.OBJECT } },
                             forYou: { type: Type.ARRAY, items: { type: Type.OBJECT } },
-                            questions: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+                            recent: { type: Type.ARRAY, items: { type: Type.OBJECT } },
                             funnyVoiceNotes: { type: Type.ARRAY, items: { type: Type.OBJECT } },
                             newTalent: { type: Type.ARRAY, items: { type: Type.OBJECT } },
                         },
-                        required: ['trending', 'forYou', 'questions', 'funnyVoiceNotes', 'newTalent']
+                        required: ['trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent']
                     }
                 },
             });
@@ -547,7 +547,7 @@ export const geminiService = {
             return {
                 trending: posts.slice(0, 5),
                 forYou: posts.slice(5, 10),
-                questions: posts.filter(p => p.caption.includes('?')).slice(0, 5),
+                recent: posts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
                 funnyVoiceNotes: [],
                 newTalent: [],
             };

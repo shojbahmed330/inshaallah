@@ -389,7 +389,7 @@ export interface NLUResponse {
 export interface CategorizedExploreFeed {
     trending: Post[];
     forYou: Post[];
-    questions: Post[];
+    recent: Post[];
     funnyVoiceNotes: Post[];
     newTalent: Post[];
 }

@@ -3,6 +3,7 @@ import { Post, User, CategorizedExploreFeed, Comment } from '../types';
 import { geminiService } from '../services/geminiService';
 import Icon from './Icon';
 import PostCarousel from './PostCarousel';
+import { PostCard } from './PostCard';
 
 // Helper hook to detect mobile screen sizes
 const useIsMobile = () => {
@@ -61,6 +62,53 @@ const MobileGridSkeleton: React.FC = () => (
         ))}
     </div>
 );
+
+const TrendingSection: React.FC<{
+    posts: Post[];
+    postCardProps: Omit<React.ComponentProps<typeof PostCard>, 'post'>;
+}> = ({ posts, postCardProps }) => {
+    if (!posts || posts.length === 0) return null;
+
+    const mainPost = posts[0];
+    const otherPosts = posts.slice(1, 5); // Take next 4
+
+    return (
+        <section>
+            <h2 className="text-3xl font-bold text-slate-100 mb-4">Trending</h2>
+            <div className="flex flex-col lg:flex-row gap-6">
+                {/* Main Post */}
+                <div className="lg:w-[60%] flex-shrink-0">
+                    <PostCard post={mainPost} {...postCardProps} />
+                </div>
+                {/* Other Posts Grid */}
+                {otherPosts.length > 0 && (
+                    <div className="lg:w-[40%] grid grid-cols-2 gap-4">
+                        {otherPosts.map(post => {
+                            const previewUrl = post.imageUrl || post.videoUrl || post.imageDetails?.[0]?.url || post.author.avatarUrl;
+                            return (
+                                <button
+                                    key={post.id}
+                                    onClick={() => postCardProps.onOpenPhotoViewer(post, previewUrl)}
+                                    className="aspect-square bg-slate-800 rounded-lg overflow-hidden relative group"
+                                >
+                                    <img src={previewUrl} alt={post.caption} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                                    <div className="absolute bottom-2 left-2 right-2 text-white">
+                                        <div className="flex items-center gap-2">
+                                            <img src={post.author.avatarUrl} alt={post.author.name} className="w-6 h-6 rounded-full border-2 border-slate-900" />
+                                            <p className="text-xs font-semibold truncate">{post.author.name}</p>
+                                        </div>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+};
+
 
 const ExploreScreen: React.FC<ExploreScreenProps> = ({
   currentUser,
@@ -156,8 +204,8 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
         onSharePost,
         onOpenPhotoViewer,
         onDeletePost,
-        isActive: false, // Not applicable in carousel
-        isPlaying: false, // Not applicable in carousel
+        isActive: true, 
+        isPlaying: false,
         onPlayPause: () => {},
     };
 
@@ -166,7 +214,7 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
         return [
             { key: 'forYou', title: 'For You', posts: categorizedFeed.forYou },
             { key: 'trending', title: 'Trending', posts: categorizedFeed.trending },
-            { key: 'questions', title: 'Questions', posts: categorizedFeed.questions },
+            { key: 'recent', title: 'Recent Posts', posts: categorizedFeed.recent },
             { key: 'funnyVoiceNotes', title: 'Funny Notes', posts: categorizedFeed.funnyVoiceNotes },
             { key: 'newTalent', title: 'New Talent', posts: categorizedFeed.newTalent },
         ].filter(cat => cat.posts && cat.posts.length > 0);
@@ -186,7 +234,11 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
                     </>
                 ) : (
                     categories.map(cat => (
-                        <PostCarousel key={cat.key} title={cat.title} posts={cat.posts} postCardProps={commonPostCardProps} />
+                        cat.key === 'trending' ? (
+                            <TrendingSection key={cat.key} posts={cat.posts} postCardProps={commonPostCardProps} />
+                        ) : (
+                            <PostCarousel key={cat.key} title={cat.title} posts={cat.posts} postCardProps={commonPostCardProps} />
+                        )
                     ))
                 )}
             </div>
@@ -194,7 +246,8 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
     );
     
     const renderMobileView = () => {
-        const activePosts = categorizedFeed?.[activeTabKey] || [];
+        //FIX: Type 'string' is not assignable to type 'keyof CategorizedExploreFeed'.
+        const activePosts = categorizedFeed?.[activeTabKey as keyof CategorizedExploreFeed] || [];
         
         return (
             <div className="h-full w-full flex flex-col">
@@ -232,6 +285,12 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
                                         onClick={() => onOpenPhotoViewer(post, previewUrl)}
                                     >
                                         <img src={previewUrl} alt={post.caption} />
+                                        {activeTabKey === 'trending' && (
+                                            <div className="absolute bottom-2 left-2 bg-rose-600/80 backdrop-blur-sm text-white text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 z-10">
+                                                <span>🔥</span>
+                                                <span>Trending</span>
+                                            </div>
+                                        )}
                                         {(post.videoUrl || post.audioUrl) && <Icon name="play" className="w-6 h-6 text-white absolute top-2 right-2 drop-shadow-lg" />}
                                         {post.imageDetails && post.imageDetails.length > 1 && <Icon name="photo" className="w-6 h-6 text-white absolute top-2 left-2 drop-shadow-lg" />}
                                     </button>
@@ -248,6 +307,7 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
         return <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center text-red-400"><Icon name="close" className="w-16 h-16" /><h2 className="text-2xl font-bold">An Error Occurred</h2><p>{error}</p></div>;
     }
 
+    // FIX: `Object.values(categorizedFeed)` might throw error if `categorizedFeed` is null.
     const isEmpty = !isLoading && (!categorizedFeed || Object.values(categorizedFeed).every(arr => Array.isArray(arr) && arr.length === 0));
 
     if (isEmpty) {
