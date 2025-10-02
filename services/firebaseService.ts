@@ -1286,16 +1286,11 @@ export const firebaseService = {
             createdAt: new Date().toISOString()
         });
 
-        await setDoc(chatRef, {
-            participants: [sender.id, recipient.id],
-            participantInfo: {
-                [sender.id]: { name: sender.name, username: sender.username, avatarUrl: sender.avatarUrl },
-                [recipient.id]: { name: recipient.name, username: recipient.username, avatarUrl: recipient.avatarUrl }
-            },
+        await updateDoc(chatRef, {
             lastMessage: lastMessageForDoc,
             lastUpdated: serverTimestamp(),
             [`unreadCount.${recipient.id}`]: increment(1)
-        }, { merge: true });
+        });
     },
 
     async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
