@@ -38,7 +38,7 @@ const formatLastActive = (isoString?: string): string => {
         const date = new Date(isoString);
         if (isNaN(date.getTime())) return '';
         const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-        if (seconds < 60) return 'Just now';
+        if (seconds < 60) return 'now';
         const minutes = Math.floor(seconds / 60);
         if (minutes < 60) return `${minutes}m ago`;
         const hours = Math.floor(minutes / 60);
@@ -57,15 +57,14 @@ const ConversationItem: React.FC<{
   conversation: Conversation;
   currentUserId: string;
   isPinned: boolean;
+  isNew: boolean;
   isTyping: boolean;
   style: React.CSSProperties;
-  animatedMessageIds: Set<string>;
-  onAnimationEnd: (messageId: string) => void;
   onClick: () => void;
   onPinToggle: (peerId: string) => void;
   onDelete: (peerId: string) => void;
   onMute: (peerId: string) => void;
-}> = ({ conversation, currentUserId, isPinned, isTyping, style, animatedMessageIds, onAnimationEnd, onClick, onPinToggle, onDelete, onMute }) => {
+}> = ({ conversation, currentUserId, isPinned, isNew, isTyping, style, onClick, onPinToggle, onDelete, onMute }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
     // Interaction State
@@ -136,46 +135,9 @@ const ConversationItem: React.FC<{
 
     if (!lastMessage) return null;
 
+    const isUnread = unreadCount > 0;
     const isLastMessageFromMe = lastMessage.senderId === currentUserId;
-    const isUnread = unreadCount > 0 && !isLastMessageFromMe;
     
-    const isNew = isUnread && lastMessage && !animatedMessageIds.has(lastMessage.id);
-    
-    useEffect(() => {
-        let timer: number;
-        if (isNew) {
-            // After the animation duration, mark it as "seen" for animation purposes.
-            timer = window.setTimeout(() => {
-                if (lastMessage) {
-                    onAnimationEnd(lastMessage.id);
-                }
-            }, 2000); // Animation is 1.5s, give it a bit more time.
-        }
-        return () => {
-            if (timer) {
-                clearTimeout(timer);
-            }
-        };
-    }, [isNew, onAnimationEnd, lastMessage]);
-
-    const itemClasses = useMemo(() => {
-        const base = 'w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-all duration-200 ease-out touch-pan-y border-l-4';
-        let stateClasses = '';
-
-        if (isPinned) {
-            stateClasses = 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50 border-fuchsia-500';
-        } else if (isUnread) {
-            stateClasses = 'bg-fuchsia-900/40 border-fuchsia-500';
-        } else {
-            stateClasses = 'bg-slate-800/50 border-transparent';
-        }
-
-        const animationClass = isNew ? 'animate-glow' : '';
-
-        return `${base} ${stateClasses} ${animationClass}`;
-    }, [isPinned, isUnread, isNew]);
-
-
     const timeDisplay = peer.onlineStatus === 'online'
         ? new Date(lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'})
         : formatLastActive(peer.lastActiveTimestamp);
@@ -214,7 +176,7 @@ const ConversationItem: React.FC<{
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
-                className={itemClasses}
+                className={`w-full p-3 rounded-lg flex items-center gap-4 relative z-10 transition-transform duration-200 ease-out touch-pan-y ${isPinned ? 'bg-gradient-to-r from-fuchsia-900/40 via-slate-800/50 to-slate-800/50' : isUnread ? 'bg-slate-700/60' : 'bg-slate-800/50'} ${isNew ? 'animate-glow' : ''}`}
                 style={{ transform: `translateX(${swipeX}px)` }}
             >
                 <div className="relative flex-shrink-0">
@@ -252,17 +214,6 @@ const ConversationsScreen: React.FC<{
   const { language } = useSettings();
 
   const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
-  const [animatedMessageIds, setAnimatedMessageIds] = useState(new Set<string>());
-
-  const handleAnimationEnd = useCallback((messageId: string) => {
-    setAnimatedMessageIds(prev => {
-        if (prev.has(messageId)) return prev;
-        const newSet = new Set(prev);
-        newSet.add(messageId);
-        return newSet;
-    });
-  }, []);
-
   const allRelevantUserIds = useMemo(() => {
     const peerIds = conversations.map(c => c.peer.id);
     const friendIds = currentUser.friendIds || [];
@@ -300,12 +251,9 @@ const ConversationsScreen: React.FC<{
 
 
   useEffect(() => {
-    const unsubscribe = firebaseService.listenToConversations(currentUser.id, (newConversations) => {
-        setConversations(newConversations);
-    });
-
+    const unsubscribe = firebaseService.listenToConversations(currentUser.id, setConversations);
     return () => unsubscribe();
-}, [currentUser.id]);
+  }, [currentUser.id]);
 
   const handlePinToggle = (peerId: string) => {
     setPinnedIds(prev => {
@@ -358,6 +306,19 @@ const ConversationsScreen: React.FC<{
     });
   }, [sortedConversations, liveUsers]);
 
+
+  const getIsNew = (createdAt: string) => {
+      try {
+        if (!createdAt) return false;
+        const messageDate = new Date(createdAt);
+        if(isNaN(messageDate.getTime())) return false;
+        const now = new Date();
+        return (now.getTime() - messageDate.getTime()) < 5000; // 5 seconds threshold
+      } catch {
+        return false;
+      }
+  };
+
   return (
     <div className="h-full w-full flex flex-col">
       <header className="flex-shrink-0 p-4 border-b border-fuchsia-500/20 bg-black/30 backdrop-blur-sm z-10">
@@ -403,10 +364,9 @@ const ConversationsScreen: React.FC<{
               conversation={conversation}
               currentUserId={currentUser.id}
               isPinned={pinnedIds.has(conversation.peer.id)}
+              isNew={getIsNew(conversation.lastMessage?.createdAt)}
               isTyping={conversation.isTyping || false}
               style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
-              animatedMessageIds={animatedMessageIds}
-              onAnimationEnd={handleAnimationEnd}
               onClick={() => onOpenConversation(conversation.peer)}
               onPinToggle={handlePinToggle}
               onDelete={handleDeleteChat}

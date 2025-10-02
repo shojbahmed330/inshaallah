@@ -259,32 +259,22 @@ const UserApp: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    isFirstConversationLoad.current = true;
+    isFirstConversationLoad.current = true; 
 
     const unsubscribe = firebaseService.listenToConversations(user.id, (newConvos) => {
         const convoWithNewMessage = newConvos.find(convo => {
-            const lastMsg = convo.lastMessage;
-            if (!lastMsg || !lastMsg.id) {
+            if (!convo.lastMessage || convo.lastMessage.senderId === user.id) {
                 return false;
             }
-            
-            // This check is CRITICAL. We only consider a message "new" for the purpose of auto-opening
-            // a chat if it's from the other person. This stops the sender's client from reacting to its own messages.
-            const isFromPeer = lastMsg.senderId !== user.id;
-            if (!isFromPeer) {
-                return false;
-            }
-
             const previousId = previousLastMessageIdsRef.current.get(convo.peer.id);
-            const isTrulyNew = !previousId || previousId !== lastMsg.id;
-
-            return isTrulyNew;
+            return !previousId || previousId !== convo.lastMessage.id;
         });
 
         if (convoWithNewMessage) {
             const isAlreadyActive = activeChatsRef.current.some(c => c.id === convoWithNewMessage.peer.id);
             const isMobile = window.innerWidth < 768;
 
+            // Only auto-open if it's NOT the initial load and NOT on a mobile device.
             if (!isAlreadyActive && !isFirstConversationLoad.current && !isMobile) {
                 handleOpenConversation(convoWithNewMessage.peer);
             }
@@ -292,11 +282,12 @@ const UserApp: React.FC = () => {
         
         conversationsRef.current = newConvos;
         newConvos.forEach(c => {
-            if (c.lastMessage && c.lastMessage.id) {
+            if (c.lastMessage) {
                 previousLastMessageIdsRef.current.set(c.peer.id, c.lastMessage.id);
             }
         });
 
+        // Set this flag to false after the first execution.
         if (isFirstConversationLoad.current) {
             isFirstConversationLoad.current = false;
         }
