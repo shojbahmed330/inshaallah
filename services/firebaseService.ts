@@ -2033,9 +2033,69 @@ export const firebaseService = {
     getStories: async (currentUserId) => [],
     markStoryAsViewed: async (storyId, userId) => updateDoc(doc(db, 'stories', storyId), { viewedBy: arrayUnion(userId) }),
     createStory: async (storyData, mediaFile) => ({...storyData, id: '', createdAt: new Date().toISOString(), duration: 5, viewedBy: []}),
-    getGroupById: async (groupId) => null,
+    async getGroupById(groupId: string): Promise<Group | null> {
+        if (!groupId) return null;
+        try {
+            const groupRef = doc(db, 'groups', groupId);
+            const docSnap = await getDoc(groupRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                return {
+                    id: docSnap.id,
+                    ...data,
+                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+                } as Group;
+            }
+            return null;
+        } catch (error) {
+            console.error("Error fetching group by ID:", error);
+            return null;
+        }
+    },
     getSuggestedGroups: async (userId) => [],
-    createGroup: async (creator, name, description, coverPhotoUrl, privacy, requiresApproval, category) => ({ id: '', creator, name, description, coverPhotoUrl, privacy, requiresApproval, category, members: [], memberCount: 0, admins: [], moderators: [], createdAt: '' }),
+    async createGroup(creator, name, description, coverPhotoUrl, privacy, requiresApproval, category) {
+        try {
+            const creatorAuthor = {
+                id: creator.id,
+                name: creator.name,
+                username: creator.username,
+                avatarUrl: creator.avatarUrl,
+            };
+    
+            const groupsRef = collection(db, 'groups');
+            const newGroupRef = doc(groupsRef); // Generate a new ID
+    
+            const newGroupData = {
+                name,
+                description,
+                creator: creatorAuthor,
+                coverPhotoUrl,
+                members: [creatorAuthor],
+                memberCount: 1,
+                admins: [creatorAuthor],
+                moderators: [],
+                privacy,
+                createdAt: serverTimestamp(),
+                category,
+                requiresApproval,
+                joinRequests: [],
+                pendingPosts: [],
+                invitedUserIds: [],
+            };
+            
+            await setDoc(newGroupRef, newGroupData);
+    
+            return {
+                id: newGroupRef.id,
+                ...newGroupData,
+                createdAt: new Date().toISOString() // Return an approximate date for immediate use
+            };
+    
+        } catch (error) {
+            console.error("Error creating group:", error);
+            return null;
+        }
+    },
     getPostsForGroup: async (groupId) => [],
     updateGroupSettings: async (groupId, settings) => true,
     pinPost: async (groupId, postId) => true,
