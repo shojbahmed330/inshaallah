@@ -1300,11 +1300,9 @@ export const firebaseService = {
 
     async markMessagesAsRead(chatId: string, userId: string): Promise<void> {
         const chatRef = doc(db, 'chats', chatId);
-        await setDoc(chatRef, {
-            unreadCount: {
-                [userId]: 0
-            }
-        }, { merge: true });
+        await updateDoc(chatRef, {
+            [`unreadCount.${userId}`]: 0
+        });
     },
 
     async unsendMessage(chatId: string, messageId: string, userId: string): Promise<void> {
