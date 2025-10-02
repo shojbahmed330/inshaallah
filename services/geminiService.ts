@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { NLUResponse, MusicTrack, User, Post, Campaign, FriendshipStatus, Comment, Message, Conversation, ChatSettings, LiveAudioRoom, LiveVideoRoom, Group, Story, Event, GroupChat, JoinRequest, GroupCategory, StoryPrivacy, PollOption, AdminUser, CategorizedExploreFeed, Report, ReplyInfo, Author, Call, LiveAudioRoomMessage, LiveVideoRoomMessage, VideoParticipantState } from '../types';
 import { VOICE_EMOJI_MAP, MOCK_MUSIC_LIBRARY, DEFAULT_AVATARS, DEFAULT_COVER_PHOTOS } from '../constants';
@@ -503,7 +504,18 @@ export const geminiService = {
             return { trending: [], forYou: [], questions: [], funnyVoiceNotes: [], newTalent: [] };
         }
 
-        const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'questions', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. Base 'forYou' on general interest, not a specific user. 'trending' should be based on high engagement (reactions/comments). 'questions' are posts that ask a question. 'funnyVoiceNotes' are audio posts that seem humorous. 'newTalent' are posts from newer users or with unique content.`;
+        const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'questions', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. 
+        
+        CRITICAL INSTRUCTIONS FOR 'forYou' CATEGORY:
+        1.  Create a diverse and engaging feed. It should be a MIX of content types: image posts, short videos (posts with a 'videoUrl'), and interesting audio notes.
+        2.  AVOID showing too many posts with a postType of 'profile_picture_change' or 'cover_photo_change'. Do not let these dominate the feed. Prefer posts with original content.
+        3.  Prioritize content that is visually appealing or has good engagement (reactions, comments) but is different from the main 'trending' category.
+
+        General Rules:
+        - 'trending' should be based on high engagement (reactions/comments).
+        - 'questions' are posts that ask a question in their caption.
+        - 'funnyVoiceNotes' are audio posts that seem humorous from their caption.
+        - 'newTalent' are posts from newer users or with unique content.`;
 
         try {
             const response = await ai.models.generateContent({

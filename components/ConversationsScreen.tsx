@@ -269,7 +269,8 @@ const ConversationsScreen: React.FC<{
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
       // FIX: Use spread operator for converting Set<string> to string[] to resolve type inference issue.
-      await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
+      // FIX: Replaced spread operator with Array.from() to ensure correct type inference from Set<string> to string[].
+      await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) });
   };
 
   const handleArchiveToggle = async (peerId: string, withUndo: boolean = false) => {
@@ -301,7 +302,8 @@ const ConversationsScreen: React.FC<{
       }
       setArchivedIds(newArchivedIds);
       // FIX: Use spread operator for converting Set<string> to string[] to resolve type inference issue.
-      updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
+      // FIX: Replaced spread operator with Array.from() to ensure correct type inference from Set<string> to string[].
+      updateProfileLists({ archivedChatIds: Array.from(newArchivedIds), pinnedChatIds: Array.from(newPinnedIds) });
   };
   
   const handleDeleteChat = (peerId: string) => {
