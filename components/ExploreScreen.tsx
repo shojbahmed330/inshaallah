@@ -1,9 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Post, User, CategorizedExploreFeed, Comment } from '../types';
 import { geminiService } from '../services/geminiService';
-import { PostCard } from './PostCard';
 import Icon from './Icon';
 import PostCarousel from './PostCarousel';
+
+// Helper hook to detect mobile screen sizes
+const useIsMobile = () => {
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    return isMobile;
+};
 
 interface ExploreScreenProps {
   currentUser: User;
@@ -17,7 +27,7 @@ interface ExploreScreenProps {
 
 const SkeletonCarousel: React.FC<{ title: string }> = ({ title }) => (
     <div>
-        <div className="h-8 bg-slate-700 rounded w-1/3 mb-4"></div>
+        <div className="h-8 bg-slate-700 rounded w-1/3 mb-4 animate-pulse"></div>
         <div className="flex gap-4 overflow-hidden">
             {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="w-80 flex-shrink-0">
@@ -39,6 +49,19 @@ const SkeletonCarousel: React.FC<{ title: string }> = ({ title }) => (
     </div>
 );
 
+const MobileGridSkeleton: React.FC = () => (
+    <div className="layout-masonry animate-pulse p-1">
+        {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="masonry-item">
+                <div 
+                    className="w-full bg-slate-700/50 rounded-lg"
+                    style={{ height: `${Math.random() * 100 + 150}px` }}
+                ></div>
+            </div>
+        ))}
+    </div>
+);
+
 const ExploreScreen: React.FC<ExploreScreenProps> = ({
   currentUser,
   onReactToPost,
@@ -51,115 +74,193 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
     const [categorizedFeed, setCategorizedFeed] = useState<CategorizedExploreFeed | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    const isMobile = useIsMobile();
+
+    // Mobile-specific state
+    const [activeTabKey, setActiveTabKey] = useState<keyof CategorizedExploreFeed | 'forYou'>('forYou');
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const touchStartRef = useRef(0);
+    const pullDistanceRef = useRef(0);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const fetchExploreFeed = useCallback(async () => {
+        if (!isRefreshing) setIsLoading(true);
+        setError(null);
+        try {
+            const feed = await geminiService.getCategorizedExploreFeed(currentUser.id);
+            setCategorizedFeed(feed);
+        } catch (err) {
+            console.error("Failed to fetch categorized explore feed:", err);
+            setError("Could not load Explore feed. Please try again later.");
+        } finally {
+            setIsLoading(false);
+            if (isRefreshing) setIsRefreshing(false);
+        }
+    }, [currentUser.id, isRefreshing]);
 
     useEffect(() => {
-        const fetchExploreFeed = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const feed = await geminiService.getCategorizedExploreFeed(currentUser.id);
-                setCategorizedFeed(feed);
-            } catch (err) {
-                console.error("Failed to fetch categorized explore feed:", err);
-                setError("Could not load Explore feed. Please try again later.");
-            } finally {
-                setIsLoading(false);
+        fetchExploreFeed();
+    }, []); // Only on initial mount
+
+    // --- Pull-to-refresh logic ---
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container || !isMobile) return;
+
+        const handleTouchStart = (e: TouchEvent) => {
+            if (container.scrollTop === 0) {
+                touchStartRef.current = e.touches[0].clientY;
+                container.style.transition = 'transform 0.2s';
             }
         };
 
-        fetchExploreFeed();
-    }, [currentUser.id]);
+        const handleTouchMove = (e: TouchEvent) => {
+            if (touchStartRef.current > 0) {
+                const pullDistance = e.touches[0].clientY - touchStartRef.current;
+                if (pullDistance > 0) {
+                    e.preventDefault(); // Prevent browser's native pull-to-refresh
+                    pullDistanceRef.current = pullDistance;
+                    const limitedPull = Math.min(pullDistance, 100);
+                    container.style.transform = `translateY(${limitedPull}px)`;
+                }
+            }
+        };
+
+        const handleTouchEnd = () => {
+            if (pullDistanceRef.current > 80) { // Refresh threshold
+                setIsRefreshing(true);
+                fetchExploreFeed();
+            }
+            container.style.transform = 'translateY(0px)';
+            touchStartRef.current = 0;
+            pullDistanceRef.current = 0;
+        };
+
+        container.addEventListener('touchstart', handleTouchStart, { passive: false });
+        container.addEventListener('touchmove', handleTouchMove, { passive: false });
+        container.addEventListener('touchend', handleTouchEnd);
+
+        return () => {
+            container.removeEventListener('touchstart', handleTouchStart);
+            container.removeEventListener('touchmove', handleTouchMove);
+            container.removeEventListener('touchend', handleTouchEnd);
+        };
+    }, [isMobile, fetchExploreFeed]);
 
     const commonPostCardProps = {
         currentUser,
-        onReact: onReactToPost,
-        onOpenComments: onOpenComments,
+        onReactToPost,
+        onOpenComments,
         onAuthorClick: onOpenProfile,
         onSharePost,
         onOpenPhotoViewer,
         onDeletePost,
-        isActive: false,
-        isPlaying: false,
+        isActive: false, // Not applicable in carousel
+        isPlaying: false, // Not applicable in carousel
         onPlayPause: () => {},
     };
 
-    if (isLoading) {
+    const categories = useMemo(() => {
+        if (!categorizedFeed) return [];
+        return [
+            { key: 'forYou', title: 'For You', posts: categorizedFeed.forYou },
+            { key: 'trending', title: 'Trending', posts: categorizedFeed.trending },
+            { key: 'questions', title: 'Questions', posts: categorizedFeed.questions },
+            { key: 'funnyVoiceNotes', title: 'Funny Notes', posts: categorizedFeed.funnyVoiceNotes },
+            { key: 'newTalent', title: 'New Talent', posts: categorizedFeed.newTalent },
+        ].filter(cat => cat.posts && cat.posts.length > 0);
+    }, [categorizedFeed]);
+
+    const renderDesktopView = () => (
+        <div className="h-full w-full overflow-y-auto p-4 md:p-8">
+            <div className="max-w-7xl mx-auto space-y-12">
+                <header>
+                    <h1 className="text-4xl font-bold text-slate-100">Explore</h1>
+                    <p className="text-slate-400 mt-1">Discover AI-curated content from across VoiceBook.</p>
+                </header>
+                 {isLoading ? (
+                    <>
+                        <SkeletonCarousel title="Trending" />
+                        <SkeletonCarousel title="For You" />
+                    </>
+                ) : (
+                    categories.map(cat => (
+                        <PostCarousel key={cat.key} title={cat.title} posts={cat.posts} postCardProps={commonPostCardProps} />
+                    ))
+                )}
+            </div>
+        </div>
+    );
+    
+    const renderMobileView = () => {
+        const activePosts = categorizedFeed?.[activeTabKey] || [];
+        
         return (
-            <div className="h-full w-full overflow-y-auto p-4 md:p-8 space-y-12">
-                <div className="max-w-7xl mx-auto">
-                    <div className="h-10 bg-slate-700 rounded w-1/4 mb-2"></div>
-                    <div className="h-5 bg-slate-700 rounded w-1/3 mb-12"></div>
-                    <SkeletonCarousel title="Trending" />
-                    <SkeletonCarousel title="For You" />
+            <div className="h-full w-full flex flex-col">
+                <header className="flex-shrink-0 p-2 border-b border-fuchsia-500/20 bg-black/30 backdrop-blur-sm z-10">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+                        {categories.map(cat => (
+                            <button
+                                key={cat.key}
+                                onClick={() => setActiveTabKey(cat.key as keyof CategorizedExploreFeed)}
+                                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex-shrink-0 ${
+                                    activeTabKey === cat.key
+                                        ? 'bg-fuchsia-600 text-white'
+                                        : 'bg-slate-700/80 text-slate-300 hover:bg-slate-700'
+                                }`}
+                            >
+                                {cat.title}
+                            </button>
+                        ))}
+                    </div>
+                </header>
+                <div ref={containerRef} className="flex-grow overflow-y-auto relative pb-16">
+                    {isRefreshing && (
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800 p-2 rounded-full z-20">
+                            <Icon name="logo" className="w-6 h-6 text-fuchsia-400 animate-spin" />
+                        </div>
+                    )}
+                    {isLoading ? <MobileGridSkeleton /> : (
+                         <div className="layout-masonry p-1">
+                            {activePosts.map(post => {
+                                const previewUrl = post.imageUrl || post.videoUrl || post.imageDetails?.[0]?.url || post.author.avatarUrl;
+                                return (
+                                    <button 
+                                        key={post.id} 
+                                        className="masonry-item relative group"
+                                        onClick={() => onOpenPhotoViewer(post, previewUrl)}
+                                    >
+                                        <img src={previewUrl} alt={post.caption} />
+                                        {(post.videoUrl || post.audioUrl) && <Icon name="play" className="w-6 h-6 text-white absolute top-2 right-2 drop-shadow-lg" />}
+                                        {post.imageDetails && post.imageDetails.length > 1 && <Icon name="photo" className="w-6 h-6 text-white absolute top-2 left-2 drop-shadow-lg" />}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
         );
-    }
+    };
 
     if (error) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center text-red-400">
-                <Icon name="close" className="w-16 h-16" />
-                <h2 className="text-2xl font-bold">An Error Occurred</h2>
-                <p>{error}</p>
-            </div>
-        );
+        return <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center text-red-400"><Icon name="close" className="w-16 h-16" /><h2 className="text-2xl font-bold">An Error Occurred</h2><p>{error}</p></div>;
     }
-    
-    const isEmpty = !categorizedFeed || Object.values(categorizedFeed).every(arr => (arr as any[]).length === 0);
+
+    const isEmpty = !isLoading && (!categorizedFeed || Object.values(categorizedFeed).every(arr => Array.isArray(arr) && arr.length === 0));
 
     if (isEmpty) {
         return (
             <div className="flex flex-col items-center justify-center h-full gap-8 p-8 text-center">
                 <Icon name="compass" className="w-24 h-24 text-slate-600" />
                 <h2 className="text-slate-300 text-2xl font-bold">Nothing to explore yet</h2>
-                <p className="text-slate-400 max-w-sm">
-                It looks like there are no public posts available right now. Check back later!
-                </p>
+                <p className="text-slate-400 max-w-sm">It looks like there are no public posts available right now. Check back later!</p>
             </div>
         );
     }
 
-
-  return (
-    <div className="h-full w-full overflow-y-auto p-4 md:p-8">
-        <div className="max-w-7xl mx-auto space-y-12">
-            <header>
-                 <h1 className="text-4xl font-bold text-slate-100">Explore</h1>
-                <p className="text-slate-400 mt-1">Discover AI-curated content from across VoiceBook.</p>
-                <div className="mt-6 relative">
-                    <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                        <svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-                            <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
-                        </svg>
-                    </div>
-                    <input 
-                        type="search"
-                        placeholder="Search for topics, people, or questions..."
-                        className="bg-slate-800 border border-slate-700 text-slate-100 text-base rounded-full focus:ring-rose-500 focus:border-rose-500 block w-full pl-11 p-3.5 transition"
-                    />
-                </div>
-            </header>
-
-            {categorizedFeed?.forYou.length > 0 && (
-                 <PostCarousel title="For You" posts={categorizedFeed.forYou} postCardProps={commonPostCardProps} />
-            )}
-            {categorizedFeed?.trending.length > 0 && (
-                <PostCarousel title="Trending" posts={categorizedFeed.trending} postCardProps={commonPostCardProps} />
-            )}
-            {categorizedFeed?.questions.length > 0 && (
-                <PostCarousel title="Popular Questions" posts={categorizedFeed.questions} postCardProps={commonPostCardProps} />
-            )}
-            {categorizedFeed?.funnyVoiceNotes.length > 0 && (
-                <PostCarousel title="Funny Voice Notes" posts={categorizedFeed.funnyVoiceNotes} postCardProps={commonPostCardProps} />
-            )}
-             {categorizedFeed?.newTalent.length > 0 && (
-                <PostCarousel title="New Talent" posts={categorizedFeed.newTalent} postCardProps={commonPostCardProps} />
-            )}
-
-        </div>
-    </div>
-  );
+    return isMobile ? renderMobileView() : renderDesktopView();
 };
 
 export default ExploreScreen;

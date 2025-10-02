@@ -268,6 +268,7 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
+      // FIX: Use spread operator for converting Set<string> to string[] to resolve type inference issue.
       await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
   };
 
@@ -299,6 +300,7 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
+      // FIX: Use spread operator for converting Set<string> to string[] to resolve type inference issue.
       updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
   };
   
