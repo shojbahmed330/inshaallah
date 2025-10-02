@@ -1,5 +1,5 @@
 {
-  "name": "Working 48, ConversationsScreen, post done, need added future.  individual comment,  All Comment sheet",
+  "name": "Working 49, Unread working, ConversationsScreen, post done, need added future.  individual comment,  All Comment sheet",
   "description": "A fully voice-controlled social media application where you can sign up, log in, navigate your feed, post audio, comment, and more, all using your voice. This implementation simulates the voice experience through a text-based command interface powered by the Gemini API.",
   "requestFramePermissions": [
     "microphone",
