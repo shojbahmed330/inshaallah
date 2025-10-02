@@ -86,6 +86,8 @@ export interface User {
   age?: number;
   gender?: 'Male' | 'Female' | 'Other';
   friendshipStatus?: FriendshipStatus;
+  pinnedChatIds?: string[];
+  archivedChatIds?: string[];
 }
 
 export interface Author {

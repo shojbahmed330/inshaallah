@@ -1026,7 +1026,7 @@ const UserApp: React.FC = () => {
       case AppView.SEARCH_RESULTS:
         return <SearchResultsScreen {...commonScreenProps} results={searchResults} {...currentView.props} />;
       case AppView.CONVERSATIONS:
-        return <ConversationsScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} />;
+        return <ConversationsScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} friends={friends} />;
       case AppView.ADS_CENTER:
         return <AdsScreen {...commonScreenProps} />;
       case AppView.ROOMS_HUB:
