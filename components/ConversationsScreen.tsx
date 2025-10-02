@@ -3,14 +3,15 @@ import { User, Conversation, AppView, Message } from '../types';
 import Icon from './Icon';
 import { useSettings } from '../contexts/SettingsContext';
 import { firebaseService } from '../services/firebaseService';
+import { geminiService } from '../services/geminiService';
 import {
     doc, onSnapshot
 } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 
 
-const SWIPE_THRESHOLD = -70; // Pixels to swipe before it's considered an action
-const SWIPE_ACTION_WIDTH = 80; // Width for each action icon
+const SWIPE_THRESHOLD = -80;
+const SWIPE_ACTION_WIDTH = 80;
 
 const docToUser = (doc: any): User => {
     const data = doc.data();
@@ -51,23 +52,21 @@ const formatLastActive = (isoString?: string): string => {
     }
 };
 
-
-// Re-engineered ConversationItem to be a stateful, interactive component with unified pointer events
 const ConversationItem: React.FC<{
   conversation: Conversation;
   currentUserId: string;
   isPinned: boolean;
+  isArchived: boolean;
   isNew: boolean;
   isTyping: boolean;
   style: React.CSSProperties;
   onClick: () => void;
   onPinToggle: (peerId: string) => void;
+  onArchiveToggle: (peerId: string) => void;
   onDelete: (peerId: string) => void;
-  onMute: (peerId: string) => void;
-}> = ({ conversation, currentUserId, isPinned, isNew, isTyping, style, onClick, onPinToggle, onDelete, onMute }) => {
+}> = ({ conversation, currentUserId, isPinned, isArchived, isNew, isTyping, style, onClick, onPinToggle, onArchiveToggle, onDelete }) => {
     const { peer, lastMessage, unreadCount } = conversation;
     
-    // Interaction State
     const [swipeX, setSwipeX] = useState(0);
     
     const touchStart = useRef({ x: 0, y: 0, time: 0 });
@@ -91,7 +90,6 @@ const ConversationItem: React.FC<{
         
         if (!isSwipingHorizontally.current && Math.abs(deltaX) > Math.abs(deltaY) + 5) {
             isSwipingHorizontally.current = true;
-            if (navigator.vibrate) navigator.vibrate(1); // Haptic feedback on swipe start
         }
 
         if (isSwipingHorizontally.current) {
@@ -107,12 +105,14 @@ const ConversationItem: React.FC<{
         (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
         isDragging.current = false;
 
-        if (swipeX < SWIPE_THRESHOLD) {
-            setSwipeX(-SWIPE_ACTION_WIDTH * 3);
+        if (swipeX < SWIPE_THRESHOLD * 2) {
+             setSwipeX(-SWIPE_ACTION_WIDTH * 3);
+        } else if (swipeX < SWIPE_THRESHOLD) {
+             setSwipeX(-SWIPE_ACTION_WIDTH);
         } else {
             setSwipeX(0);
         }
-
+        
         const pressDuration = Date.now() - touchStart.current.time;
         const movedDistance = Math.hypot(e.clientX - touchStart.current.x, e.clientY - touchStart.current.y);
 
@@ -125,11 +125,11 @@ const ConversationItem: React.FC<{
         if (isDragging.current) handlePointerUp(e);
     };
 
-    const handleActionClick = (action: 'pin' | 'mute' | 'delete', e: React.MouseEvent) => {
+    const handleActionClick = (action: 'pin' | 'archive' | 'delete', e: React.MouseEvent) => {
         e.stopPropagation();
         if (action === 'pin') onPinToggle(peer.id);
+        else if (action === 'archive') onArchiveToggle(peer.id);
         else if (action === 'delete') onDelete(peer.id);
-        else onMute(peer.id);
         setSwipeX(0);
     };
 
@@ -156,19 +156,13 @@ const ConversationItem: React.FC<{
             default: return '...';
         }
     };
-    
-    const deleteSwipeProgress = Math.max(0, Math.min(1, (-swipeX - (SWIPE_ACTION_WIDTH * 2)) / SWIPE_ACTION_WIDTH));
-    const deleteButtonStyle = {
-        boxShadow: `0 0 ${deleteSwipeProgress * 20}px rgba(220, 38, 38, 0.8)`,
-        transform: `scale(${1 + deleteSwipeProgress * 0.1})`,
-    };
 
     return (
         <div className="w-full relative animate-list-item-slide-in" style={style}>
             <div className="absolute inset-y-0 right-0 flex items-center bg-slate-700 text-white z-0 overflow-hidden rounded-r-lg" style={{ width: `${-swipeX > 0 ? Math.min(-swipeX, SWIPE_ACTION_WIDTH * 3) : 0}px` }}>
-                <button onClick={(e) => handleActionClick('pin', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-sky-600 hover:bg-sky-500"><Icon name="pin" className="w-6 h-6"/>{isPinned ? 'Unpin' : 'Pin'}</button>
-                <button onClick={(e) => handleActionClick('mute', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-slate-600 hover:bg-slate-500"><Icon name="bell-slash" className="w-6 h-6"/>Mute</button>
-                <button onClick={(e) => handleActionClick('delete', e)} style={deleteButtonStyle} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500 transition-all rounded-r-lg"><Icon name="trash" className="w-6 h-6"/>Delete</button>
+                <button onClick={(e) => handleActionClick('pin', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-sky-600 hover:bg-sky-500 disabled:opacity-50" disabled={isArchived}><Icon name="pin" className="w-6 h-6"/>{isPinned ? 'Unpin' : 'Pin'}</button>
+                <button onClick={(e) => handleActionClick('archive', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-slate-600 hover:bg-slate-500"><Icon name="archive-box" className="w-6 h-6"/>{isArchived ? 'Unarchive' : 'Archive'}</button>
+                <button onClick={(e) => handleActionClick('delete', e)} className="w-20 h-full flex flex-col items-center justify-center gap-1 bg-red-600 hover:bg-red-500 transition-all rounded-r-lg"><Icon name="trash" className="w-6 h-6"/>Delete</button>
             </div>
 
             <div
@@ -204,150 +198,185 @@ const ConversationItem: React.FC<{
     );
 };
 
+const NewChatItem: React.FC<{ user: User; onClick: () => void; }> = ({ user, onClick }) => (
+    <button onClick={onClick} className="w-full p-3 rounded-lg flex items-center gap-4 hover:bg-slate-700/50 transition-colors animate-list-item-slide-in">
+        <img src={user.avatarUrl} alt={user.name} className="w-16 h-16 rounded-full" />
+        <div className="text-left">
+            <p className="text-lg text-slate-300 font-semibold">{user.name}</p>
+            <p className="text-sm text-sky-400">Tap to start a conversation</p>
+        </div>
+    </button>
+);
+
+const UndoSnackbar: React.FC<{ onUndo: () => void; text: string }> = ({ onUndo, text }) => (
+    <div className="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 w-11/12 max-w-md bg-slate-900/80 backdrop-blur-sm text-white p-3 rounded-lg shadow-2xl flex items-center justify-between z-20 animate-slide-in-bottom">
+        <span>{text}</span>
+        <button onClick={onUndo} className="font-bold text-sky-400 hover:text-sky-300 px-3 py-1 rounded-md">Undo</button>
+    </div>
+);
+
+
 const ConversationsScreen: React.FC<{
   currentUser: User;
   onOpenConversation: (peer: User) => void;
-}> = ({ currentUser, onOpenConversation }) => {
+  friends: User[];
+}> = ({ currentUser, onOpenConversation, friends }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
-  const { language } = useSettings();
+  const [showArchived, setShowArchived] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set(currentUser.pinnedChatIds || []));
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set(currentUser.archivedChatIds || []));
+  const [undoAction, setUndoAction] = useState<{ type: 'delete' | 'archive'; peerId: string } | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
 
   const [liveUsers, setLiveUsers] = useState<Map<string, User>>(new Map());
   const allRelevantUserIds = useMemo(() => {
     const peerIds = conversations.map(c => c.peer.id);
-    const friendIds = currentUser.friendIds || [];
-    return [...new Set([...peerIds, ...friendIds])];
-  }, [conversations, currentUser.friendIds]);
+    return [...new Set([...peerIds, ...friends.map(f => f.id)])];
+  }, [conversations, friends]);
+
+  useEffect(() => {
+      setPinnedIds(new Set(currentUser.pinnedChatIds || []));
+      setArchivedIds(new Set(currentUser.archivedChatIds || []));
+  }, [currentUser.pinnedChatIds, currentUser.archivedChatIds]);
+
+  useEffect(() => {
+      return () => { if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current); };
+  }, []);
 
   useEffect(() => {
     if (allRelevantUserIds.length === 0) return;
+    const unsubscribes = allRelevantUserIds.map(userId => onSnapshot(doc(db, 'users', userId), (doc) => {
+        if (doc.exists()) setLiveUsers(prev => new Map(prev).set(userId, docToUser(doc)));
+    }));
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [JSON.stringify(allRelevantUserIds)]);
 
-    const unsubscribes = allRelevantUserIds.map(userId => {
-        const userRef = doc(db, 'users', userId);
-        return onSnapshot(userRef, (doc) => {
-            if (doc.exists()) {
-                const user = docToUser(doc);
-                setLiveUsers(prev => new Map(prev).set(userId, user));
-            }
-        });
-    });
-
-    return () => {
-        unsubscribes.forEach(unsub => unsub());
-    };
-  }, [JSON.stringify(allRelevantUserIds)]); // Use JSON.stringify for array dependency
-
-  const onlineFriends = useMemo(() => {
-    const friends: User[] = [];
-    (currentUser.friendIds || []).forEach(friendId => {
-        const user = liveUsers.get(friendId);
-        if (user && user.onlineStatus === 'online') {
-            friends.push(user);
-        }
-    });
-    return friends;
-  }, [liveUsers, currentUser.friendIds]);
-
+  const onlineFriends = useMemo(() => friends.filter(friend => liveUsers.get(friend.id)?.onlineStatus === 'online'), [liveUsers, friends]);
 
   useEffect(() => {
     const unsubscribe = firebaseService.listenToConversations(currentUser.id, setConversations);
     return () => unsubscribe();
   }, [currentUser.id]);
 
-  const handlePinToggle = (peerId: string) => {
-    setPinnedIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(peerId)) {
-        newSet.delete(peerId);
+  const updateProfileLists = async (updates: Partial<Pick<User, 'pinnedChatIds' | 'archivedChatIds'>>) => {
+      await geminiService.updateProfile(currentUser.id, updates);
+  };
+
+  const handlePinToggle = async (peerId: string) => {
+      const newPinnedIds = new Set(pinnedIds);
+      if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
+      else newPinnedIds.add(peerId);
+      setPinnedIds(newPinnedIds);
+      // FIX: Replaced `Array.from(set)` with spread syntax `[...set]` to resolve TypeScript error where `Array.from` was incorrectly inferred as returning `unknown[]` instead of `string[]`.
+      await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
+  };
+
+  const handleArchiveToggle = async (peerId: string, withUndo: boolean = false) => {
+      if (withUndo) {
+          setUndoAction({ type: 'archive', peerId });
+          if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+          undoTimeoutRef.current = window.setTimeout(() => {
+              performArchive(peerId);
+              setUndoAction(null);
+          }, 5000);
       } else {
-        newSet.add(peerId);
+          performArchive(peerId);
       }
-      return newSet;
-    });
+  };
+  
+  const performArchive = (peerId: string) => {
+      const newArchivedIds = new Set(archivedIds);
+      let newPinnedIds = pinnedIds;
+
+      if (newArchivedIds.has(peerId)) {
+          newArchivedIds.delete(peerId);
+      } else {
+          newArchivedIds.add(peerId);
+          if (pinnedIds.has(peerId)) {
+              newPinnedIds = new Set(pinnedIds);
+              newPinnedIds.delete(peerId);
+              setPinnedIds(newPinnedIds);
+          }
+      }
+      setArchivedIds(newArchivedIds);
+      // FIX: Replaced `Array.from(set)` with spread syntax `[...set]` to resolve TypeScript error where `Array.from` was incorrectly inferred as returning `unknown[]` instead of `string[]`.
+      updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
   };
   
   const handleDeleteChat = (peerId: string) => {
-    if (window.confirm("Are you sure you want to permanently delete this conversation? This action cannot be undone.")) {
-        const chatId = firebaseService.getChatId(currentUser.id, peerId);
-        firebaseService.deleteChatHistory(chatId);
-        // The real-time listener will update the UI automatically.
-    }
+      setUndoAction({ type: 'delete', peerId });
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = window.setTimeout(() => {
+          const chatId = firebaseService.getChatId(currentUser.id, peerId);
+          firebaseService.deleteChatHistory(chatId);
+          setUndoAction(null);
+      }, 5000);
   };
 
-  const handleMuteChat = (peerId: string) => {
-      alert(`Mute notifications for this user (feature coming soon).`);
+  const handleUndo = () => {
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      setUndoAction(null);
   };
-  
-  const filteredConversations = conversations.filter(c =>
-    c.peer.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  
-  const sortedConversations = useMemo(() => {
-    return [...filteredConversations].sort((a, b) => {
-      const aIsPinned = pinnedIds.has(a.peer.id);
-      const bIsPinned = pinnedIds.has(b.peer.id);
-      if (aIsPinned !== bIsPinned) return aIsPinned ? -1 : 1;
-      // Handle cases where lastMessage or createdAt might be missing
-      const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
-      const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
-      return timeB - timeA;
-    });
-  }, [filteredConversations, pinnedIds]);
 
   const enrichedConversations = useMemo(() => {
-    return sortedConversations.map(convo => {
+    return conversations.map(convo => {
         const liveUser = liveUsers.get(convo.peer.id);
-        if (liveUser) {
-            const enrichedPeer = { ...convo.peer, onlineStatus: liveUser.onlineStatus, lastActiveTimestamp: liveUser.lastActiveTimestamp };
-            return { ...convo, peer: enrichedPeer };
-        }
-        return convo;
+        return liveUser ? { ...convo, peer: { ...convo.peer, ...liveUser } } : convo;
     });
-  }, [sortedConversations, liveUsers]);
+  }, [conversations, liveUsers]);
 
+  const { visibleConversations, newChatResults } = useMemo(() => {
+    const baseList = enrichedConversations
+        .filter(c => showArchived ? archivedIds.has(c.peer.id) : !archivedIds.has(c.peer.id))
+        .sort((a, b) => {
+            const aIsPinned = pinnedIds.has(a.peer.id);
+            const bIsPinned = pinnedIds.has(b.peer.id);
+            if (aIsPinned !== bIsPinned) return aIsPinned ? -1 : 1;
+            const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+            const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
 
-  const getIsNew = (createdAt: string) => {
-      try {
-        if (!createdAt) return false;
-        const messageDate = new Date(createdAt);
-        if(isNaN(messageDate.getTime())) return false;
-        const now = new Date();
-        return (now.getTime() - messageDate.getTime()) < 5000; // 5 seconds threshold
-      } catch {
-        return false;
-      }
-  };
+    if (!searchQuery.trim()) return { visibleConversations: baseList, newChatResults: [] };
+
+    const lowerQuery = searchQuery.toLowerCase();
+    const filteredConvos = baseList.filter(c => c.peer.name.toLowerCase().includes(lowerQuery));
+
+    const existingPeerIds = new Set(conversations.map(c => c.peer.id));
+    const newChats = friends.filter(f =>
+        !existingPeerIds.has(f.id) && f.name.toLowerCase().includes(lowerQuery)
+    );
+    
+    return { visibleConversations: filteredConvos, newChatResults: newChats };
+  }, [enrichedConversations, searchQuery, showArchived, archivedIds, pinnedIds, friends, conversations]);
+
+  const getIsNew = (createdAt: string) => new Date().getTime() - new Date(createdAt).getTime() < 5000;
 
   return (
     <div className="h-full w-full flex flex-col">
       <header className="flex-shrink-0 p-4 border-b border-fuchsia-500/20 bg-black/30 backdrop-blur-sm z-10">
-        <h1 className="text-3xl font-bold text-slate-100 mb-4">Messages</h1>
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-3xl font-bold text-slate-100">Messages</h1>
+          <button onClick={() => setShowArchived(s => !s)} className="flex items-center gap-2 text-sm font-semibold text-fuchsia-300 hover:bg-fuchsia-500/10 px-3 py-1.5 rounded-md">
+            <Icon name="archive-box" className="w-5 h-5"/>
+            {showArchived ? 'Inbox' : 'Archived'}
+          </button>
+        </div>
         <form className="relative">
           <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-            <svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
-              <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
-            </svg>
+            <svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/></svg>
           </div>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search conversations..."
-            className="bg-slate-800 border border-slate-700 text-slate-100 text-base rounded-full focus:ring-fuchsia-500 focus:border-fuchsia-500 block w-full pl-11 p-3 transition"
-          />
+          <input type="search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search messages or start a new chat..." className="bg-slate-800 border border-slate-700 text-slate-100 text-base rounded-full focus:ring-fuchsia-500 focus:border-fuchsia-500 block w-full pl-11 p-3 transition"/>
         </form>
       </header>
       
-      {onlineFriends.length > 0 && (
+      {!searchQuery && onlineFriends.length > 0 && (
         <div className="px-4 pt-4 flex-shrink-0">
           <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
             {onlineFriends.map(friend => (
               <button key={friend.id} onClick={() => onOpenConversation(friend)} className="flex flex-col items-center gap-1 w-16 text-center flex-shrink-0">
-                <div className="relative">
-                  <img src={friend.avatarUrl} alt={friend.name} className="w-14 h-14 rounded-full" />
-                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900"></div>
-                </div>
+                <div className="relative"><img src={friend.avatarUrl} alt={friend.name} className="w-14 h-14 rounded-full" /><div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900"></div></div>
                 <p className="text-xs text-slate-300 truncate w-full">{friend.name.split(' ')[0]}</p>
               </button>
             ))}
@@ -357,30 +386,26 @@ const ConversationsScreen: React.FC<{
       )}
 
       <div className="flex-grow overflow-y-auto p-4 space-y-3">
-        {enrichedConversations.length > 0 ? (
-          enrichedConversations.map((conversation, index) => (
-            <ConversationItem
-              key={conversation.peer.id}
-              conversation={conversation}
-              currentUserId={currentUser.id}
-              isPinned={pinnedIds.has(conversation.peer.id)}
-              isNew={getIsNew(conversation.lastMessage?.createdAt)}
-              isTyping={conversation.isTyping || false}
-              style={{ animationDelay: `${Math.min(index * 50, 500)}ms` }}
-              onClick={() => onOpenConversation(conversation.peer)}
-              onPinToggle={handlePinToggle}
-              onDelete={handleDeleteChat}
-              onMute={handleMuteChat}
-            />
-          ))
-        ) : (
+        {visibleConversations.length > 0 && visibleConversations.map((c, i) => (
+            <ConversationItem key={c.peer.id} conversation={c} currentUserId={currentUser.id} isPinned={pinnedIds.has(c.peer.id)} isArchived={archivedIds.has(c.peer.id)} isNew={getIsNew(c.lastMessage?.createdAt)} isTyping={c.isTyping || false} style={{ animationDelay: `${Math.min(i * 50, 500)}ms` }} onClick={() => onOpenConversation(c.peer)} onPinToggle={handlePinToggle} onArchiveToggle={() => handleArchiveToggle(c.peer.id, true)} onDelete={handleDeleteChat} />
+        ))}
+        {newChatResults.length > 0 && (
+            <>
+                <h2 className="text-sm font-bold uppercase text-fuchsia-400 pt-4">Start a new chat</h2>
+                {newChatResults.map(friend => <NewChatItem key={friend.id} user={friend} onClick={() => onOpenConversation(friend)} />)}
+            </>
+        )}
+        {visibleConversations.length === 0 && newChatResults.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center">
             <Icon name="message" className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-xl font-semibold">No conversations yet</p>
-            <p>Start a chat with a friend to see it here.</p>
+            <p className="text-xl font-semibold">
+              {searchQuery ? 'No results found' : showArchived ? 'No archived chats' : 'No conversations yet'}
+            </p>
+            <p>{searchQuery ? 'Try a different name.' : 'Start a chat with a friend to see it here.'}</p>
           </div>
         )}
       </div>
+       {undoAction && <UndoSnackbar onUndo={handleUndo} text={`Chat ${undoAction.type === 'delete' ? 'deleted' : 'archived'}.`} />}
     </div>
   );
 };
