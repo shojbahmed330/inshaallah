@@ -687,17 +687,44 @@ export const firebaseService = {
             .filter(post => post.author.id !== currentUserId && !post.isSponsored);
     },
 
-    listenToReelsPosts(callback: (posts: Post[]) => void) {
+    listenToReelsPosts(currentUserId: string, callback: (posts: Post[]) => void): () => void {
         const postsRef = collection(db, 'posts');
-        const q = query(postsRef,
+        const reels: Map<string, Post> = new Map();
+    
+        const processAndCallback = () => {
+            const allReels = Array.from(reels.values())
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            callback(allReels);
+        };
+    
+        // Query 1: Public Reels
+        const publicQuery = query(postsRef,
             where('videoUrl', '!=', null),
             where('author.privacySettings.postVisibility', '==', 'public'),
             orderBy('createdAt', 'desc'),
-            limit(50));
-        return onSnapshot(q, (snapshot) => {
-            const reelsPosts = snapshot.docs.map(docToPost);
-            callback(reelsPosts);
-        });
+            limit(50)
+        );
+        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
+            snapshot.docs.forEach(doc => reels.set(doc.id, docToPost(doc)));
+            processAndCallback();
+        }, (error) => console.error("Error fetching public reels:", error));
+    
+        // Query 2: User's own Reels
+        const ownQuery = query(postsRef,
+            where('videoUrl', '!=', null),
+            where('author.id', '==', currentUserId),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
+        const unsubOwn = onSnapshot(ownQuery, (snapshot) => {
+            snapshot.docs.forEach(doc => reels.set(doc.id, docToPost(doc)));
+            processAndCallback();
+        }, (error) => console.error("Error fetching own reels:", error));
+    
+        return () => {
+            unsubPublic();
+            unsubOwn();
+        };
     },
 
     listenToPost(postId: string, callback: (post: Post | null) => void): () => void {

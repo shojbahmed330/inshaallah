@@ -406,7 +406,7 @@ const UserApp: React.FC = () => {
     let unsubscribes: (()=>void)[] = [];
     
     setIsLoadingReels(true);
-    const unsubscribeReelsPosts = firebaseService.listenToReelsPosts((newReelsPosts) => {
+    const unsubscribeReelsPosts = firebaseService.listenToReelsPosts(user.id, (newReelsPosts) => {
         setReelsPosts(newReelsPosts);
         setIsLoadingReels(false);
     });
