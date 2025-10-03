@@ -520,7 +520,7 @@ export const firebaseService = {
         try {
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friendIds: arrayRemove(targetUserId) });
-            batch.update(targetUserRef, { friendIds: arrayRemove(currentUserId) });
+            batch.update(targetUserRef, { friendIds: arrayRemove(targetUserId) });
             await batch.commit();
             return true;
         } catch (error) {
@@ -615,23 +615,50 @@ export const firebaseService = {
     },
 
     // --- Posts ---
-    listenToFeedPosts(currentUserId: string, friendIds: string[], blockedUserIds: string[], callback: (posts: Post[]) => void) {
+    listenToFeedPosts(currentUserId: string, friendIds: string[], blockedUserIds: string[], callback: (posts: Post[]) => void): () => void {
         const postsRef = collection(db, 'posts');
-        const q = query(postsRef, orderBy('createdAt', 'desc'), limit(50));
-        return onSnapshot(q, async (snapshot) => {
-            const feedPosts = snapshot.docs.map(docToPost);
+        let publicPosts: Post[] = [];
+        let ownPosts: Post[] = [];
+
+        const processAndCallback = () => {
+            const combined = new Map<string, Post>();
+            
+            publicPosts.forEach(p => combined.set(p.id, p));
+            ownPosts.forEach(p => combined.set(p.id, p));
+            
+            const allPosts = Array.from(combined.values())
+                .filter(p => p.author && !blockedUserIds.includes(p.author.id))
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            callback(allPosts);
+        };
+
+        // Query 1: Public posts
+        const publicQuery = query(postsRef,
+            where('author.privacySettings.postVisibility', '==', 'public'),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
+        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
+            publicPosts = snapshot.docs.map(docToPost);
+            processAndCallback();
+        }, (error) => console.error("Error fetching public posts:", error));
     
-            const filtered = feedPosts.filter(p => {
-                if (!p.author || !p.author.id) return false;
-                if (blockedUserIds.includes(p.author.id)) return false;
-                if (p.author.id === currentUserId) return true;
-                if (p.author.privacySettings?.postVisibility === 'public') return true;
-                if (friendIds.includes(p.author.id) && p.author.privacySettings?.postVisibility === 'friends') return true;
+        // Query 2: User's own posts (of any visibility)
+        const ownQuery = query(postsRef,
+            where('author.id', '==', currentUserId),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
+        const unsubOwn = onSnapshot(ownQuery, (snapshot) => {
+            ownPosts = snapshot.docs.map(docToPost);
+            processAndCallback();
+        }, (error) => console.error("Error fetching own posts:", error));
     
-                return false;
-            });
-            callback(filtered);
-        });
+        return () => {
+            unsubPublic();
+            unsubOwn();
+        };
     },
 
     listenToExplorePosts(currentUserId: string, callback: (posts: Post[]) => void) {
@@ -1701,6 +1728,7 @@ export const firebaseService = {
         try {
             await updateDoc(groupRef, {
                 members: arrayRemove(memberObject),
+                memberIds: arrayRemove(userId),
                 memberCount: increment(-1),
                 admins: arrayRemove(memberObject),
                 moderators: arrayRemove(memberObject),
@@ -2199,11 +2227,14 @@ export const firebaseService = {
          const group = groupDoc.data() as Group;
 
          if (group.privacy === 'public') {
-             await updateDoc(groupRef, { members: arrayUnion(memberObject), memberCount: increment(1) });
+             await updateDoc(groupRef, {
+                 members: arrayUnion(memberObject),
+                 memberIds: arrayUnion(user.id),
+                 memberCount: increment(1)
+             });
          } else {
              const request = { user: memberObject, answers: answers || [] };
              await updateDoc(groupRef, { joinRequests: arrayUnion(request) });
-             // Notify admins
              const admins = group.admins || [group.creator];
              for (const admin of admins) {
                  await _createNotification(admin.id, 'group_join_request', user, { groupId, groupName: group.name });
