@@ -691,7 +691,7 @@ export const firebaseService = {
         const postsRef = collection(db, 'posts');
         const q = query(postsRef,
             where('videoUrl', '!=', null),
-            orderBy('videoUrl'),
+            where('author.privacySettings.postVisibility', '==', 'public'),
             orderBy('createdAt', 'desc'),
             limit(50));
         return onSnapshot(q, (snapshot) => {
@@ -2091,7 +2091,7 @@ export const firebaseService = {
             };
     
             const groupsRef = collection(db, 'groups');
-            const newGroupRef = doc(groupsRef); // Generate a new ID
+            const newGroupRef = doc(groupsRef);
     
             const newGroupData = {
                 name,
@@ -2099,7 +2099,7 @@ export const firebaseService = {
                 creator: creatorAuthor,
                 coverPhotoUrl,
                 members: [creatorAuthor],
-                memberIds: [creator.id], // Add creator's ID to the memberIds array
+                memberIds: [creator.id],
                 memberCount: 1,
                 admins: [creatorAuthor],
                 moderators: [],
@@ -2113,17 +2113,11 @@ export const firebaseService = {
             };
             
             await setDoc(newGroupRef, newGroupData);
-
-            // Create an empty chat document for the new group
-            const groupChatRef = doc(db, 'groupChats', newGroupRef.id);
-            await setDoc(groupChatRef, {
-                messages: [] // Initialize with an empty messages array
-            });
     
             return {
                 id: newGroupRef.id,
                 ...newGroupData,
-                createdAt: new Date().toISOString() // Return an approximate date for immediate use
+                createdAt: new Date().toISOString()
             };
     
         } catch (error) {
@@ -2136,7 +2130,6 @@ export const firebaseService = {
         const groupRef = doc(db, 'groups', groupId);
         try {
             const settingsToSave = { ...settings };
-            // Check if coverPhotoUrl is a new base64 upload
             if (settings.coverPhotoUrl && settings.coverPhotoUrl.startsWith('data:image')) {
                 const blob = await fetch(settings.coverPhotoUrl).then(res => res.blob());
                 const { url: newCoverUrl } = await uploadMediaToCloudinary(blob, `group_cover_${groupId}_${Date.now()}.jpeg`);
@@ -2254,10 +2247,8 @@ export const firebaseService = {
             return null;
         }
     },
-    // @FIX: Implement missing listener functions to resolve errors in UserApp, GroupPageScreen, and GroupChatScreen.
     listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
         const groupsRef = collection(db, 'groups');
-        // A user is a member if their ID is in the memberIds array.
         const q = query(groupsRef, where('memberIds', 'array-contains', userId));
         return onSnapshot(q, (snapshot) => {
             const groups = snapshot.docs.map(doc => {
@@ -2310,8 +2301,17 @@ export const firebaseService = {
                     })),
                 } as GroupChat);
             } else {
-                // If no chat doc, return an empty structure
-                callback({ groupId, messages: [] });
+                // Document doesn't exist, create it on-demand.
+                console.log(`Group chat for ${groupId} not found, creating it.`);
+                setDoc(chatRef, { messages: [] })
+                    .then(() => {
+                        // The listener will fire again, but we can provide an initial state to avoid "Loading..."
+                         callback({ groupId, messages: [] });
+                    })
+                    .catch(err => {
+                        console.error("Failed to auto-create group chat:", err);
+                        callback(null); // Creation failed
+                    });
             }
         });
     },
