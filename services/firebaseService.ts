@@ -2071,6 +2071,7 @@ export const firebaseService = {
                 creator: creatorAuthor,
                 coverPhotoUrl,
                 members: [creatorAuthor],
+                memberIds: [creator.id], // Add creator's ID to the memberIds array
                 memberCount: 1,
                 admins: [creatorAuthor],
                 moderators: [],
