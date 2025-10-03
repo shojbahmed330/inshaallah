@@ -268,7 +268,7 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Replace Array.from with spread syntax to resolve TypeScript inference issue.
+      // FIX: Use spread syntax for better type inference from Set to Array.
       await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
   };
 
@@ -300,7 +300,7 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Replace Array.from with spread syntax to resolve TypeScript inference issue.
+      // FIX: Use spread syntax for better type inference from Set to Array.
       updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
   };
   

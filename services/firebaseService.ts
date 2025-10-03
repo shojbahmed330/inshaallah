@@ -13,7 +13,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, uploadString } from 'fire
 
 import { db, auth, storage } from './firebaseConfig';
 import { User, Post, Comment, Message, ReplyInfo, Story, Group, Campaign, LiveAudioRoom, LiveVideoRoom, Report, Notification, Lead, Author, AdminUser, FriendshipStatus, ChatSettings, Conversation, Call, LiveAudioRoomMessage, LiveVideoRoomMessage, VideoParticipantState } from '../types';
-import { DEFAULT_AVATARS, DEFAULT_COVER_PHOTOS, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET, SPONSORED_CPM_BDT } from '../constants';
+import { DEFAULT_AVATARS, DEFAULT_COVER_PHOTOS, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET, SPONSOR_CPM_BDT } from '../constants';
 
 
 // --- Helper Functions ---
@@ -617,47 +617,58 @@ export const firebaseService = {
     // --- Posts ---
     listenToFeedPosts(currentUserId: string, friendIds: string[], blockedUserIds: string[], callback: (posts: Post[]) => void): () => void {
         const postsRef = collection(db, 'posts');
-        let publicPosts: Post[] = [];
-        let ownPosts: Post[] = [];
-
+        const postsMap = new Map<string, Post>();
+        let allUnsubscribes: (() => void)[] = [];
+    
         const processAndCallback = () => {
-            const combined = new Map<string, Post>();
-            
-            publicPosts.forEach(p => combined.set(p.id, p));
-            ownPosts.forEach(p => combined.set(p.id, p));
-            
-            const allPosts = Array.from(combined.values())
+            const allPosts = Array.from(postsMap.values())
                 .filter(p => p.author && !blockedUserIds.includes(p.author.id))
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            
             callback(allPosts);
         };
-
-        // Query 1: Public posts
-        const publicQuery = query(postsRef,
-            where('author.privacySettings.postVisibility', '==', 'public'),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
-        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
-            publicPosts = snapshot.docs.map(docToPost);
-            processAndCallback();
-        }, (error) => console.error("Error fetching public posts:", error));
+    
+        const addListener = (q, source) => {
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+                let changed = false;
+                snapshot.docs.forEach(doc => {
+                    if (!postsMap.has(doc.id)) {
+                        postsMap.set(doc.id, docToPost(doc));
+                        changed = true;
+                    }
+                });
+                if (changed) processAndCallback();
+            }, (error) => console.error(`Error fetching posts from ${source}:`, error));
+            allUnsubscribes.push(unsubscribe);
+        };
+    
+        // Query 1: Public posts from anyone
+        const publicQuery = query(postsRef, where('author.privacySettings.postVisibility', '==', 'public'), orderBy('createdAt', 'desc'), limit(50));
+        addListener(publicQuery, 'public');
     
         // Query 2: User's own posts (of any visibility)
-        const ownQuery = query(postsRef,
-            where('author.id', '==', currentUserId),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
-        const unsubOwn = onSnapshot(ownQuery, (snapshot) => {
-            ownPosts = snapshot.docs.map(docToPost);
-            processAndCallback();
-        }, (error) => console.error("Error fetching own posts:", error));
+        const ownQuery = query(postsRef, where('author.id', '==', currentUserId), orderBy('createdAt', 'desc'), limit(50));
+        addListener(ownQuery, 'own');
+        
+        // Query 3: Friends' posts (visibility 'friends')
+        const friendChunks = [];
+        for (let i = 0; i < friendIds.length; i += 10) {
+            friendChunks.push(friendIds.slice(i, i + 10));
+        }
+    
+        friendChunks.forEach((chunk, index) => {
+            if (chunk.length > 0) {
+                const friendsQuery = query(postsRef,
+                    where('author.id', 'in', chunk),
+                    where('author.privacySettings.postVisibility', '==', 'friends'),
+                    orderBy('createdAt', 'desc'),
+                    limit(30)
+                );
+                addListener(friendsQuery, `friends-chunk-${index}`);
+            }
+        });
     
         return () => {
-            unsubPublic();
-            unsubOwn();
+            allUnsubscribes.forEach(unsub => unsub());
         };
     },
 
@@ -2276,18 +2287,50 @@ export const firebaseService = {
     },
     listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
         const groupsRef = collection(db, 'groups');
-        const q = query(groupsRef, where('memberIds', 'array-contains', userId));
-        return onSnapshot(q, (snapshot) => {
-            const groups = snapshot.docs.map(doc => {
+        const groupsMap = new Map<string, Group>();
+        const unsubscribes: (() => void)[] = [];
+    
+        const processAndCallback = () => {
+            const allGroups = Array.from(groupsMap.values())
+                .sort((a, b) => a.name.localeCompare(b.name));
+            callback(allGroups);
+        };
+    
+        // Query 1: Groups where the user is a member
+        const memberQuery = query(groupsRef, where('memberIds', 'array-contains', userId));
+        const unsubMember = onSnapshot(memberQuery, (snapshot) => {
+            snapshot.docs.forEach(doc => {
                 const data = doc.data();
-                return {
+                groupsMap.set(doc.id, {
                     id: doc.id,
                     ...data,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                } as Group;
+                } as Group);
             });
-            callback(groups);
-        });
+            processAndCallback();
+        }, (error) => console.error("Error fetching member groups:", error));
+        unsubscribes.push(unsubMember);
+    
+        // Query 2: All public groups
+        const publicQuery = query(groupsRef, where('privacy', '==', 'public'));
+        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
+            snapshot.docs.forEach(doc => {
+                if (!groupsMap.has(doc.id)) { // Avoid overwriting groups the user is already a member of
+                    const data = doc.data();
+                    groupsMap.set(doc.id, {
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+                    } as Group);
+                }
+            });
+            processAndCallback();
+        }, (error) => console.error("Error fetching public groups:", error));
+        unsubscribes.push(unsubPublic);
+    
+        return () => {
+            unsubscribes.forEach(unsub => unsub());
+        };
     },
 
     listenToGroup(groupId: string, callback: (group: Group | null) => void): () => void {
