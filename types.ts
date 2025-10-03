@@ -330,6 +330,7 @@ export interface Group {
     creator: Author;
     coverPhotoUrl: string;
     members: Author[];
+    memberIds: string[];
     memberCount: number;
     admins: Author[];
     moderators: Author[];
@@ -345,14 +346,23 @@ export interface Group {
     topContributorIds?: string[];
 }
 
+export interface GroupChatMessage {
+    id: string;
+    sender: Author;
+    text?: string;
+    mediaUrl?: string;
+    mediaType?: 'image' | 'video';
+    audioUrl?: string;
+    duration?: number;
+    createdAt: string | any;
+    reactions?: { [emoji: string]: string[] };
+    replyTo?: ReplyInfo;
+    isDeleted?: boolean;
+}
+
 export interface GroupChat {
     groupId: string;
-    messages: {
-        id: string;
-        sender: Author;
-        text: string;
-        createdAt: string;
-    }[];
+    messages: GroupChatMessage[];
 }
 
 export interface Event {

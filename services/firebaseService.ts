@@ -2199,4 +2199,102 @@ export const firebaseService = {
             return null;
         }
     },
+    // @FIX: Implement missing listener functions to resolve errors in UserApp, GroupPageScreen, and GroupChatScreen.
+    listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
+        const groupsRef = collection(db, 'groups');
+        // A user is a member if their ID is in the memberIds array.
+        const q = query(groupsRef, where('memberIds', 'array-contains', userId));
+        return onSnapshot(q, (snapshot) => {
+            const groups = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+                } as Group;
+            });
+            callback(groups);
+        });
+    },
+
+    listenToGroup(groupId: string, callback: (group: Group | null) => void): () => void {
+        const groupRef = doc(db, 'groups', groupId);
+        return onSnapshot(groupRef, (doc) => {
+            if (doc.exists()) {
+                const data = doc.data();
+                callback({
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+                } as Group);
+            } else {
+                callback(null);
+            }
+        });
+    },
+
+    listenToPostsForGroup(groupId: string, callback: (posts: Post[]) => void): () => void {
+        const postsRef = collection(db, 'posts');
+        const q = query(postsRef, where('groupId', '==', groupId), where('status', '==', 'approved'), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const posts = snapshot.docs.map(docToPost);
+            callback(posts);
+        });
+    },
+
+    listenToGroupChat(groupId: string, callback: (chat: GroupChat | null) => void): () => void {
+        const chatRef = doc(db, 'groupChats', groupId);
+        return onSnapshot(chatRef, (doc) => {
+            if (doc.exists()) {
+                const data = doc.data();
+                callback({
+                    groupId: doc.id,
+                    messages: (data.messages || []).map((msg: any) => ({
+                        ...msg,
+                        createdAt: msg.createdAt instanceof Timestamp ? msg.createdAt.toDate().toISOString() : msg.createdAt,
+                    })),
+                } as GroupChat);
+            } else {
+                // If no chat doc, return an empty structure
+                callback({ groupId, messages: [] });
+            }
+        });
+    },
+    
+    async reactToGroupChatMessage(groupId: string, messageId: string, userId: string, emoji: string): Promise<void> {
+        const chatRef = doc(db, 'groupChats', groupId);
+        await runTransaction(db, async (transaction) => {
+            const chatDoc = await transaction.get(chatRef);
+            if (!chatDoc.exists()) throw "Chat does not exist!";
+            const messages = chatDoc.data().messages || [];
+            const msgIndex = messages.findIndex((m: any) => m.id === messageId);
+            if (msgIndex === -1) throw "Message not found!";
+    
+            const message = messages[msgIndex];
+            const reactions = message.reactions || {};
+            const previousReaction = Object.keys(reactions).find(key => reactions[key].includes(userId));
+    
+            if (previousReaction) {
+                reactions[previousReaction] = reactions[previousReaction].filter((id: string) => id !== userId);
+            }
+    
+            if (previousReaction !== emoji) {
+                if (!reactions[emoji]) {
+                    reactions[emoji] = [];
+                }
+                reactions[emoji].push(userId);
+            }
+            
+            for (const key in reactions) {
+                if (reactions[key].length === 0) {
+                    delete reactions[key];
+                }
+            }
+            
+            message.reactions = reactions;
+            messages[msgIndex] = message;
+    
+            transaction.update(chatRef, { messages });
+        });
+    },
 };

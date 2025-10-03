@@ -442,6 +442,10 @@ export const geminiService = {
     createStory: (storyData, mediaFile) => firebaseService.createStory(storyData, mediaFile),
     
     // --- Groups ---
+    // @FIX: Add missing passthrough function for listening to user groups.
+    listenToUserGroups: (userId: string, callback: (groups: Group[]) => void) => firebaseService.listenToUserGroups(userId, callback),
+    // @FIX: Add missing passthrough function for listening to a single group.
+    listenToGroup: (groupId: string, callback: (group: Group | null) => void) => firebaseService.listenToGroup(groupId, callback),
     getGroupById: (groupId: string) => firebaseService.getGroupById(groupId),
     getSuggestedGroups: (userId: string) => firebaseService.getSuggestedGroups(userId),
     createGroup: (creator, name, description, coverPhotoUrl, privacy, requiresApproval, category) => firebaseService.createGroup(creator, name, description, coverPhotoUrl, privacy, requiresApproval, category),
@@ -449,6 +453,8 @@ export const geminiService = {
 // @FIX: Added missing passthrough function for leaving a group.
     leaveGroup: (userId, groupId) => firebaseService.leaveGroup(userId, groupId),
     getPostsForGroup: (groupId) => firebaseService.getPostsForGroup(groupId),
+    // @FIX: Add missing passthrough function for listening to group posts.
+    listenToPostsForGroup: (groupId: string, callback: (posts: Post[]) => void) => firebaseService.listenToPostsForGroup(groupId, callback),
     updateGroupSettings: (groupId, settings) => firebaseService.updateGroupSettings(groupId, settings),
     pinPost: (groupId, postId) => firebaseService.pinPost(groupId, postId),
     unpinPost: (groupId) => firebaseService.unpinPost(groupId),
@@ -457,8 +463,12 @@ export const geminiService = {
     inviteFriendToGroup: (groupId, friendId) => firebaseService.inviteFriendToGroup(groupId, friendId),
     
     // --- Group Chat & Events ---
+    // @FIX: Add missing passthrough function for listening to a group chat.
+    listenToGroupChat: (groupId: string, callback: (chat: GroupChat | null) => void) => firebaseService.listenToGroupChat(groupId, callback),
     getGroupChat: (groupId: string) => firebaseService.getGroupChat(groupId),
     sendGroupChatMessage: (groupId, sender, text) => firebaseService.sendGroupChatMessage(groupId, sender, text),
+    // @FIX: Add missing passthrough function for reacting to a group chat message.
+    reactToGroupChatMessage: (groupId: string, messageId: string, userId: string, emoji: string) => firebaseService.reactToGroupChatMessage(groupId, messageId, userId, emoji),
     getGroupEvents: (groupId: string) => firebaseService.getGroupEvents(groupId),
     createGroupEvent: (creator, groupId, title, description, date) => firebaseService.createGroupEvent(creator, groupId, title, description, date),
     rsvpToEvent: (userId, eventId) => firebaseService.rsvpToEvent(userId, eventId),

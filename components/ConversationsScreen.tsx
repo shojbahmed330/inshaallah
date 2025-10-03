@@ -268,7 +268,7 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: The spread operator `...` on a Set was causing a type error. Replaced with `Array.from()` for robust type conversion.
+      // FIX: The spread operator was causing a type error in some TS versions. Using `Array.from()` is safer for converting a Set to an Array.
       await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) });
   };
 
@@ -300,7 +300,7 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: The spread operator `...` on a Set was causing a type error. Replaced with `Array.from()` for robust type conversion.
+      // FIX: The spread operator was causing a type error in some TS versions. Using `Array.from()` is safer for converting a Set to an Array.
       updateProfileLists({ archivedChatIds: Array.from(newArchivedIds), pinnedChatIds: Array.from(newPinnedIds) });
   };
   

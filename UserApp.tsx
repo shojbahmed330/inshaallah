@@ -423,6 +423,9 @@ const UserApp: React.FC = () => {
     });
     unsubscribes.push(unsubscribeCalls);
 
+    const unsubscribeGroups = firebaseService.listenToUserGroups(user.id, setGroups);
+    unsubscribes.push(unsubscribeGroups);
+
     return () => {
         unsubscribes.forEach(unsub => unsub());
     };
@@ -768,6 +771,9 @@ const UserApp: React.FC = () => {
   }
   
   const handleGroupCreated = (newGroup: Group) => {
+    // Optimistically update the local state so the new group appears immediately
+    // This ensures that when the user navigates back, the group is in the list.
+    setGroups(prevGroups => [newGroup, ...prevGroups.filter(g => g.id !== newGroup.id)]);
     navigate(AppView.GROUP_PAGE, { groupId: newGroup.id });
   };
 

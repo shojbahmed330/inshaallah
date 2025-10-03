@@ -68,14 +68,15 @@ interface GroupPageScreenProps {
   onNavigate: (view: AppView, props?: any) => void;
   onSetTtsMessage: (message: string) => void;
   onOpenProfile: (userName: string) => void;
-  onViewPost: (postId: string) => void;
+  onOpenComments: (post: Post) => void;
   onReactToPost: (postId: string, emoji: string) => void;
   onSharePost: (post: Post) => void;
   onStartCreatePost: (props: any) => void;
   lastCommand: string | null;
   onCommandProcessed: () => void;
   onGoBack: () => void;
-  onStartComment: (postId: string) => void;
+  onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
+  onDeletePost: (postId: string) => void;
 }
 
 const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
@@ -84,14 +85,15 @@ const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
   onNavigate,
   onSetTtsMessage,
   onOpenProfile,
-  onViewPost,
+  onOpenComments,
   onReactToPost,
   onSharePost,
   onStartCreatePost,
   lastCommand,
   onCommandProcessed,
   onGoBack,
-  onStartComment
+  onOpenPhotoViewer,
+  onDeletePost
 }) => {
   const [group, setGroup] = useState<Group | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -105,44 +107,67 @@ const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
   const { language } = useSettings();
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isInitialLoad = useRef(true);
 
-  const fetchData = useCallback(async (isInitial = false) => {
-    const groupDetails = await geminiService.getGroupById(groupId);
-    if (groupDetails) {
-      setGroup(groupDetails);
-      const memberStatus = groupDetails.members.some(m => m.id === currentUser.id);
-      setIsMember(memberStatus);
-      setHasRequested(groupDetails.joinRequests?.some(r => r.user.id === currentUser.id) ?? false);
+  useEffect(() => {
+    setIsLoading(true);
+    let isMounted = true;
+    
+    const unsubscribeGroup = geminiService.listenToGroup(groupId, (groupDetails) => {
+        if (!isMounted) return;
+        if (groupDetails) {
+            setGroup(groupDetails);
+            const memberStatus = groupDetails.memberIds.includes(currentUser.id);
+            setIsMember(memberStatus);
+            setHasRequested(groupDetails.joinRequests?.some(r => r.user.id === currentUser.id) ?? false);
+            
+            if (isInitialLoad.current) {
+                onSetTtsMessage(getTtsPrompt('group_page_loaded', language, { name: groupDetails.name }));
+                isInitialLoad.current = false;
+            }
+        } else {
+            // Group might have been deleted
+            onSetTtsMessage("This group no longer exists.");
+            onGoBack();
+        }
+    });
+
+    return () => {
+        isMounted = false;
+        unsubscribeGroup();
+    };
+  }, [groupId, currentUser.id, onSetTtsMessage, language, onGoBack]);
+  
+  useEffect(() => {
+      if (!group) return;
+
+      let unsubscribePosts: () => void = () => {};
       
-      const canViewPosts = groupDetails.privacy === 'public' || memberStatus;
-      if (canViewPosts) {
-          const groupPosts = await geminiService.getPostsForGroup(groupId);
-          
-          const announcementPosts = groupPosts.filter(p => p.postType === 'announcement');
-          const regularPosts = groupPosts.filter(p => p.postType !== 'announcement');
-          
-          const pinned = groupDetails.pinnedPostId ? regularPosts.find(p => p.id === groupDetails.pinnedPostId) : null;
+      const canViewPosts = group.privacy === 'public' || isMember;
 
-          setAnnouncements(announcementPosts);
-          setPinnedPost(pinned);
-          setPosts(regularPosts.filter(p => p.id !== groupDetails.pinnedPostId));
+      if (canViewPosts) {
+          unsubscribePosts = geminiService.listenToPostsForGroup(groupId, (groupPosts) => {
+              const announcementPosts = groupPosts.filter(p => p.postType === 'announcement');
+              const regularPosts = groupPosts.filter(p => p.postType !== 'announcement');
+              
+              const pinned = group.pinnedPostId ? regularPosts.find(p => p.id === group.pinnedPostId) : null;
+
+              setAnnouncements(announcementPosts);
+              setPinnedPost(pinned);
+              setPosts(regularPosts.filter(p => p.id !== group.pinnedPostId));
+              setIsLoading(false);
+          });
       } else {
           setPosts([]);
           setPinnedPost(null);
           setAnnouncements([]);
+          setIsLoading(false);
       }
       
-      if(isInitial) onSetTtsMessage(getTtsPrompt('group_page_loaded', language, { name: groupDetails.name }));
-    }
-    setIsLoading(false);
-  }, [groupId, currentUser.id, onSetTtsMessage, language]);
+      return () => unsubscribePosts();
 
-  useEffect(() => {
-    setIsLoading(true);
-    fetchData(true);
-    const interval = setInterval(() => fetchData(false), 7000); // Poll for new posts/members
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [group, isMember, groupId]);
+
 
   const handleJoin = async (answers?: string[]) => {
     if (!group) return;
@@ -154,7 +179,7 @@ const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
         } else {
             onSetTtsMessage(getTtsPrompt('join_request_sent', language));
         }
-        fetchData(true);
+        // Listener will update the state automatically
     }
   };
 
@@ -173,7 +198,7 @@ const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
     const success = await geminiService.leaveGroup(currentUser.id, group.id);
     if (success) {
       onSetTtsMessage(getTtsPrompt('group_left', language, { name: group.name }));
-      fetchData(true);
+      // Listener will update state
     }
   };
   
@@ -185,7 +210,7 @@ const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
     const success = await geminiService.pinPost(groupId, postId);
     if (success) {
         onSetTtsMessage(getTtsPrompt('post_pinned', language));
-        fetchData(false);
+        // Listener will update state
     }
   };
 
@@ -193,13 +218,14 @@ const GroupPageScreen: React.FC<GroupPageScreenProps> = ({
     const success = await geminiService.unpinPost(groupId);
     if (success) {
         onSetTtsMessage(getTtsPrompt('post_unpinned', language));
-        fetchData(false);
+        // Listener will update state
     }
   };
   
   const handleVote = async (postId: string, optionIndex: number) => {
     const updatedPost = await geminiService.voteOnPoll(currentUser.id, postId, optionIndex);
     if(updatedPost) {
+        // Optimistic update until listener catches up
         setPosts(currentPosts => currentPosts.map(p => p.id === postId ? updatedPost : p));
         if (pinnedPost && pinnedPost.id === postId) {
             setPinnedPost(updatedPost);
@@ -362,15 +388,16 @@ useEffect(() => {
                             currentUser={currentUser}
                             isActive={false}
                             isPlaying={false}
-                            onPlayPause={() => onViewPost(post.id)}
+                            onPlayPause={() => onNavigate(AppView.POST_DETAILS, { postId: post.id })}
                             onReact={onReactToPost}
-                            onViewPost={onViewPost}
+                            onOpenComments={() => onOpenComments(post)}
                             onAuthorClick={onOpenProfile}
                             isGroupAdmin={canManage}
                             onVote={handleVote}
                             groupRole={getRole(post.author)}
-                            onStartComment={onStartComment}
                             onSharePost={onSharePost}
+                            onDeletePost={onDeletePost}
+                            onOpenPhotoViewer={onOpenPhotoViewer}
                         />
                     ))}
                 </div>
@@ -381,7 +408,7 @@ useEffect(() => {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                     Pinned Post
                   </p>
-                  <PostCard post={pinnedPost} currentUser={currentUser} isActive={false} isPlaying={false} onPlayPause={() => onViewPost(pinnedPost.id)} onReact={onReactToPost} onViewPost={onViewPost} onAuthorClick={onOpenProfile} isGroupAdmin={canManage} isPinned={true} onUnpinPost={handleUnpinPost} onVote={handleVote} groupRole={getRole(pinnedPost.author)} onStartComment={onStartComment} onSharePost={onSharePost}/>
+                  <PostCard post={pinnedPost} currentUser={currentUser} isActive={false} isPlaying={false} onPlayPause={() => onNavigate(AppView.POST_DETAILS, { postId: pinnedPost.id })} onReact={onReactToPost} onOpenComments={() => onOpenComments(pinnedPost)} onAuthorClick={onOpenProfile} isGroupAdmin={canManage} isPinned={true} onUnpinPost={handleUnpinPost} onVote={handleVote} groupRole={getRole(pinnedPost.author)} onSharePost={onSharePost} onDeletePost={onDeletePost} onOpenPhotoViewer={onOpenPhotoViewer} />
                 </div>
               )}
               {posts.length > 0 ? (
@@ -392,17 +419,18 @@ useEffect(() => {
                         currentUser={currentUser}
                         isActive={false} 
                         isPlaying={false}
-                        onPlayPause={() => onViewPost(post.id)}
+                        onPlayPause={() => onNavigate(AppView.POST_DETAILS, { postId: post.id })}
                         onReact={onReactToPost}
-                        onViewPost={onViewPost}
+                        onOpenComments={() => onOpenComments(post)}
                         onAuthorClick={onOpenProfile}
                         isGroupAdmin={canManage}
                         isPinned={false}
                         onPinPost={handlePinPost}
                         onVote={handleVote}
                         groupRole={getRole(post.author)}
-                        onStartComment={onStartComment}
                         onSharePost={onSharePost}
+                        onDeletePost={onDeletePost}
+                        onOpenPhotoViewer={onOpenPhotoViewer}
                       />
                   ))
               ) : (

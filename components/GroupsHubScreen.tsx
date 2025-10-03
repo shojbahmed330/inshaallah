@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AppView, Group, User, GroupCategory } from '../types';
 import { geminiService } from '../services/geminiService';
@@ -185,7 +184,7 @@ const GroupsHubScreen: React.FC<GroupsHubScreenProps> = ({ currentUser, onNaviga
     }
   };
 
-  const filteredGroups = groups.filter(group => {
+  const filteredUserGroups = groups.filter(group => {
     const matchesCategory = selectedCategory === 'All' || group.category === selectedCategory;
     const matchesSearch = group.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           group.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -207,7 +206,7 @@ const GroupsHubScreen: React.FC<GroupsHubScreenProps> = ({ currentUser, onNaviga
         </div>
 
         {!isLoadingSuggestions && suggestedGroups.length > 0 && (
-            <div className="mb-8">
+            <div className="mb-12">
                 <h2 className="text-2xl font-bold text-slate-100 mb-4">Groups You Might Like</h2>
                 <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 no-scrollbar">
                     {suggestedGroups.map(group => (
@@ -224,7 +223,8 @@ const GroupsHubScreen: React.FC<GroupsHubScreenProps> = ({ currentUser, onNaviga
         )}
 
         <div className="mb-6">
-            <div className="relative w-full">
+            <h2 className="text-2xl font-bold text-slate-100 mb-4">Your Groups</h2>
+            <div className="relative w-full mb-4">
                 <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
                     <svg className="w-5 h-5 text-slate-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 20">
                         <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m19 19-4-4m0-7A7 7 0 1 1 1 8a7 7 0 0 1 14 0Z"/>
@@ -235,37 +235,37 @@ const GroupsHubScreen: React.FC<GroupsHubScreenProps> = ({ currentUser, onNaviga
                     type="search"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search groups by name or description..."
+                    placeholder="Search your groups..."
                     className="bg-slate-800 border border-slate-700 text-slate-100 text-base rounded-full focus:ring-lime-500 focus:border-lime-500 block w-full pl-11 p-3 transition"
                 />
             </div>
+             <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+                {(['All', ...GROUP_CATEGORIES] as const).map(category => (
+                    <button
+                        key={category}
+                        onClick={() => setSelectedCategory(category)}
+                        className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex-shrink-0 ${
+                            selectedCategory === category
+                                ? 'bg-lime-600 text-black'
+                                : 'bg-slate-700/80 text-slate-300 hover:bg-slate-700'
+                        }`}
+                    >
+                        {category}
+                    </button>
+                ))}
+            </div>
         </div>
 
-        <div className="mb-8 flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 no-scrollbar">
-            {(['All', ...GROUP_CATEGORIES] as const).map(category => (
-                <button
-                    key={category}
-                    onClick={() => setSelectedCategory(category)}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex-shrink-0 ${
-                        selectedCategory === category
-                            ? 'bg-lime-600 text-black'
-                            : 'bg-slate-700/80 text-slate-300 hover:bg-slate-700'
-                    }`}
-                >
-                    {category}
-                </button>
-            ))}
-        </div>
 
-        {filteredGroups.length === 0 ? (
+        {filteredUserGroups.length === 0 ? (
           <div className="text-center py-20 bg-slate-800/50 rounded-lg">
             <Icon name="users" className="w-20 h-20 mx-auto text-slate-600 mb-4" />
             <h2 className="text-2xl font-bold text-slate-300">No Groups Found</h2>
-            <p className="text-slate-400 mt-2">{searchQuery || selectedCategory !== 'All' ? `No groups match your criteria.` : "Be the first to create a new community!"}</p>
+            <p className="text-slate-400 mt-2">{searchQuery || selectedCategory !== 'All' ? `No groups match your criteria.` : "Join or create a group to get started!"}</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredGroups.map(group => (
+            {filteredUserGroups.map(group => (
               <button
                 key={group.id}
                 onClick={() => handleViewGroup(group)}
