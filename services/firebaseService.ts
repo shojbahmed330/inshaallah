@@ -2085,6 +2085,12 @@ export const firebaseService = {
             };
             
             await setDoc(newGroupRef, newGroupData);
+
+            // Create an empty chat document for the new group
+            const groupChatRef = doc(db, 'groupChats', newGroupRef.id);
+            await setDoc(groupChatRef, {
+                messages: [] // Initialize with an empty messages array
+            });
     
             return {
                 id: newGroupRef.id,
@@ -2098,7 +2104,24 @@ export const firebaseService = {
         }
     },
     getPostsForGroup: async (groupId) => [],
-    updateGroupSettings: async (groupId, settings) => true,
+    async updateGroupSettings(groupId: string, settings: Partial<Group>): Promise<boolean> {
+        const groupRef = doc(db, 'groups', groupId);
+        try {
+            const settingsToSave = { ...settings };
+            // Check if coverPhotoUrl is a new base64 upload
+            if (settings.coverPhotoUrl && settings.coverPhotoUrl.startsWith('data:image')) {
+                const blob = await fetch(settings.coverPhotoUrl).then(res => res.blob());
+                const { url: newCoverUrl } = await uploadMediaToCloudinary(blob, `group_cover_${groupId}_${Date.now()}.jpeg`);
+                settingsToSave.coverPhotoUrl = newCoverUrl;
+            }
+    
+            await updateDoc(groupRef, removeUndefined(settingsToSave));
+            return true;
+        } catch (error) {
+            console.error("Error updating group settings:", error);
+            return false;
+        }
+    },
     pinPost: async (groupId, postId) => true,
     unpinPost: async (groupId) => true,
     inviteFriendToGroup: async (groupId, friendId) => true,

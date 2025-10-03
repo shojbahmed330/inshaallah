@@ -167,7 +167,8 @@ const ManageGroupScreen: React.FC<ManageGroupScreenProps> = ({ currentUser, grou
 
         if(success) {
             onSetTtsMessage(getTtsPrompt('group_settings_saved', language));
-            fetchData(); // Refresh data
+            setNewCoverPhoto(null);
+            fetchData(); // Refresh data to get the new URL if it was uploaded
         }
     };
 
@@ -274,7 +275,7 @@ const ManageGroupScreen: React.FC<ManageGroupScreenProps> = ({ currentUser, grou
                 return (
                     <div className="space-y-6">
                         <div>
-                            <label className="block mb-2 text-sm font-medium text-slate-300">Group Profile Picture</label>
+                            <label className="block mb-2 text-sm font-medium text-slate-300">Group Cover Photo</label>
                             <div className="relative group aspect-[16/9] bg-slate-700 rounded-lg overflow-hidden">
                                 <img src={newCoverPhoto || group.coverPhotoUrl} alt="Group Cover" className="w-full h-full object-cover"/>
                                 <input 
