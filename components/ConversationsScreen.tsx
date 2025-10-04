@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, Conversation, AppView, Message } from '../types';
 import Icon from './Icon';
@@ -268,8 +269,8 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Use the spread operator for explicit type conversion from Set to Array. The original code was producing a type error.
-      await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
+      // FIX: Explicitly convert Set to array using Array.from to satisfy TypeScript.
+      await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) });
   };
 
   const handleArchiveToggle = async (peerId: string, withUndo: boolean = false) => {
@@ -299,8 +300,8 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Use the spread operator for explicit type conversion from Set to Array. The original code was producing a type error.
-      updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
+      // FIX: Explicitly convert Sets to arrays using Array.from to satisfy TypeScript.
+      updateProfileLists({ archivedChatIds: Array.from(newArchivedIds), pinnedChatIds: Array.from(newPinnedIds) });
   };
   
   const handleDeleteChat = (peerId: string) => {
