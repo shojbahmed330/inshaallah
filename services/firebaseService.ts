@@ -707,44 +707,55 @@ export const firebaseService = {
         const postsRef = collection(db, 'posts');
         const reelsMap = new Map<string, Post>();
         const unsubscribes: (() => void)[] = [];
-
+    
         const processAndCallback = () => {
             const allReels = Array.from(reelsMap.values())
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             callback(allReels);
         };
     
-        const createListener = (q: any, source: string) => {
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'removed') {
-                        reelsMap.delete(change.doc.id);
-                    } else {
-                        reelsMap.set(change.doc.id, docToPost(change.doc));
-                    }
-                });
-                processAndCallback();
-            }, (error) => console.error(`Error fetching reels from ${source}:`, error));
-            unsubscribes.push(unsubscribe);
-        };
-
-        // Query 1: Public reels from anyone (excluding the current user to avoid duplicates)
+        // Query 1: User's own reels. This is always safe.
+        const ownQuery = query(postsRef,
+            where('videoUrl', '!=', null),
+            where('author.id', '==', currentUserId),
+            orderBy('createdAt', 'desc')
+        );
+        const unsubOwn = onSnapshot(ownQuery, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'removed') {
+                    reelsMap.delete(change.doc.id);
+                } else {
+                    reelsMap.set(change.doc.id, docToPost(change.doc));
+                }
+            });
+            processAndCallback();
+        }, (error) => {
+            console.error("Error fetching own reels:", error);
+        });
+        unsubscribes.push(unsubOwn);
+    
+        // Query 2: Public reels. This is the query that can fail.
         const publicQuery = query(postsRef,
             where('videoUrl', '!=', null),
             where('author.privacySettings.postVisibility', '==', 'public'),
             orderBy('createdAt', 'desc'),
             limit(50)
         );
-        createListener(publicQuery, 'public reels');
-    
-        // Query 2: User's own reels (of any visibility)
-        const ownQuery = query(postsRef,
-            where('videoUrl', '!=', null),
-            where('author.id', '==', currentUserId),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
-        createListener(ownQuery, 'own reels');
+        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                 if (change.doc.data().author.id === currentUserId) return; // Avoid duplicates
+                if (change.type === 'removed') {
+                    reelsMap.delete(change.doc.id);
+                } else {
+                    reelsMap.set(change.doc.id, docToPost(change.doc));
+                }
+            });
+            processAndCallback();
+        }, (error) => {
+            // GRACEFUL FAILURE: If this fails, we log it but the app continues with just the user's own reels.
+            console.warn("Could not fetch public reels due to permissions or data inconsistency. Only your own reels may be shown.", error.message);
+        });
+        unsubscribes.push(unsubPublic);
     
         return () => {
             unsubscribes.forEach(unsub => unsub());

@@ -268,8 +268,8 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Using spread syntax for better type inference from Set to Array.
-      await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
+      // FIX: Use Array.from() for explicit type conversion from Set to Array. The original code was producing a type error.
+      await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) });
   };
 
   const handleArchiveToggle = async (peerId: string, withUndo: boolean = false) => {
@@ -287,21 +287,20 @@ const ConversationsScreen: React.FC<{
   
   const performArchive = (peerId: string) => {
       const newArchivedIds = new Set(archivedIds);
-      let newPinnedIds = pinnedIds;
+      let newPinnedIds = new Set(pinnedIds);
 
       if (newArchivedIds.has(peerId)) {
           newArchivedIds.delete(peerId);
       } else {
           newArchivedIds.add(peerId);
           if (pinnedIds.has(peerId)) {
-              newPinnedIds = new Set(pinnedIds);
               newPinnedIds.delete(peerId);
               setPinnedIds(newPinnedIds);
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Using spread syntax for better type inference from Set to Array.
-      updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
+      // FIX: Use Array.from() for explicit type conversion from Set to Array. The original code was producing a type error.
+      updateProfileLists({ archivedChatIds: Array.from(newArchivedIds), pinnedChatIds: Array.from(newPinnedIds) });
   };
   
   const handleDeleteChat = (peerId: string) => {
