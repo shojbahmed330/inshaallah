@@ -17,6 +17,8 @@ interface CommentSheetProps {
   onPostComment: (postId: string, text: string, parentId?: string | null) => Promise<void>;
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
+  onReportPost: (post: Post) => void;
+  onReportComment: (comment: Comment) => void;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
@@ -35,6 +37,8 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
   onOpenProfile,
   onSharePost,
   onOpenPhotoViewer,
+  onReportPost,
+  onReportComment
 }) => {
   const [post, setPost] = useState<Post | null>(initialPost);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -44,6 +48,8 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   
+  const [isPostMenuOpen, setPostMenuOpen] = useState(false);
+  const postMenuRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const { language } = useSettings();
 
@@ -132,6 +138,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
                 onReact={(commentId, emoji) => post && onReactToComment(post.id, commentId, emoji)}
                 onEdit={(commentId, newText) => post && onEditComment(post.id, commentId, newText)}
                 onDelete={(commentId) => post && onDeleteComment(post.id, commentId)}
+                onReport={onReportComment}
                 isReply={isReply}
             />
         </div>
@@ -171,6 +178,18 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
                                 <p className="text-fuchsia-500 text-sm">{new Date(post.createdAt).toLocaleDateString()}</p>
                             </div>
                         </button>
+                        {post.author.id !== currentUser.id && (
+                            <div className="relative" ref={postMenuRef}>
+                                <button onClick={() => setPostMenuOpen(p => !p)}>
+                                    <Icon name="ellipsis-vertical" className="w-6 h-6 text-slate-400" />
+                                </button>
+                                {isPostMenuOpen && (
+                                    <div className="absolute top-full right-0 mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 text-sm font-semibold">
+                                        <button onClick={() => { onReportPost(post); setPostMenuOpen(false); }} className="w-full text-left px-4 py-2 text-yellow-400 hover:bg-yellow-500/10">Report Post</button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     {post.caption && <p className="text-slate-200">{post.caption}</p>}
                     

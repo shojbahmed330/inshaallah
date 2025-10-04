@@ -19,6 +19,7 @@ interface PostCardProps {
   onSharePost?: (post: Post) => void;
   onAdClick?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
+  onReportPost?: (post: Post) => void;
   onOpenPhotoViewer?: (post: Post, initialUrl?: string) => void;
   groupRole?: GroupRole;
   isGroupAdmin?: boolean;
@@ -106,7 +107,7 @@ const ImageGridRenderer: React.FC<{
     }
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onOpenComments, onAuthorClick, onSharePost, onAdClick, onDeletePost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onOpenComments, onAuthorClick, onSharePost, onAdClick, onDeletePost, onReportPost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote }) => {
   // FINAL FIX: Add a guard clause for the post and its author.
   if (!post || !post.author) {
     return null;
@@ -148,7 +149,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
   const userVotedOptionIndex = currentUser && post.poll ? post.poll.options.findIndex(opt => opt.votedBy.includes(currentUser.id)) : -1;
   const totalVotes = post.poll ? post.poll.options.reduce((sum, opt) => sum + opt.votes, 0) : 0;
   const isAuthor = currentUser?.id === post.author.id;
-  const canShowMenu = isAuthor || isGroupAdmin;
+  const canShowMenu = isAuthor || isGroupAdmin || (onReportPost && !isAuthor);
 
 
   const timeAgo = new Date(post.createdAt).toLocaleDateString('en-US', {
@@ -262,6 +263,14 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
       onDeletePost?.(post.id);
     }
   }
+
+  const handleReport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    if (onReportPost) {
+        onReportPost(post);
+    }
+  };
 
   const handlePin = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -476,12 +485,17 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
               </button>
               {isMenuOpen && (
                 <div className="absolute top-full right-0 mt-1 w-40 bg-black border border-fuchsia-500/20 rounded-lg shadow-xl z-10 text-sm font-semibold">
+                  <ul>
                    {isGroupAdmin && (
-                      <button onClick={handlePin} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">{isPinned ? 'Unpin Post' : 'Pin Post'}</button>
+                      <li><button onClick={handlePin} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">{isPinned ? 'Unpin Post' : 'Pin Post'}</button></li>
                    )}
                    {isAuthor && onDeletePost && (
-                       <button onClick={handleDelete} className="w-full text-left px-4 py-2 text-red-500 hover:bg-red-500/10">Delete Post</button>
+                       <li><button onClick={handleDelete} className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10">Delete Post</button></li>
                    )}
+                   {!isAuthor && onReportPost && (
+                        <li><button onClick={handleReport} className="w-full text-left px-4 py-2 text-yellow-400 hover:bg-yellow-500/10">Report Post</button></li>
+                   )}
+                  </ul>
                 </div>
               )}
             </div>

@@ -27,6 +27,7 @@ interface ProfileScreenProps {
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   onDeletePost: (postId: string) => void;
+  onReportPost: (post: Post) => void;
   
   onCommandProcessed: () => void;
   scrollState: ScrollState;
@@ -64,7 +65,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     onEditProfile, onOpenComments, onOpenProfile, onReactToPost, onBlockUser, scrollState,
     onCommandProcessed, onSetScrollState, onNavigate, onGoBack,
     onCurrentUserUpdate, onPostCreated,
-    onSharePost, onOpenPhotoViewer, onDeletePost
+    onSharePost, onOpenPhotoViewer, onDeletePost, onReportPost
 }) => {
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -630,6 +631,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                         onSharePost={onSharePost}
                                         onOpenPhotoViewer={onOpenPhotoViewer}
                                         onDeletePost={onDeletePost}
+                                        onReportPost={onReportPost}
                                     />
                                 </div>
                             )) : (

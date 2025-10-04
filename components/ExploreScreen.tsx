@@ -24,6 +24,7 @@ interface ExploreScreenProps {
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   onDeletePost: (postId: string) => void;
+  onReportPost: (post: Post) => void;
 }
 
 const SkeletonCarousel: React.FC<{ title: string }> = ({ title }) => (
@@ -118,6 +119,7 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
   onSharePost,
   onOpenPhotoViewer,
   onDeletePost,
+  onReportPost,
 }) => {
     const [categorizedFeed, setCategorizedFeed] = useState<CategorizedExploreFeed | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -204,6 +206,7 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
         onSharePost,
         onOpenPhotoViewer,
         onDeletePost,
+        onReportPost,
         isActive: true, 
         isPlaying: false,
         onPlayPause: () => {},

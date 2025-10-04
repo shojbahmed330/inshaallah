@@ -17,6 +17,9 @@ interface ImageModalProps {
   onPostComment: (postId: string, text: string, parentId?: string | null, imageId?: string) => Promise<void>;
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
+  onDeletePost: (postId: string) => void;
+  onReportPost: (post: Post) => void;
+  onReportComment: (comment: Comment) => void;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenCommentsSheet: (post: Post) => void;
@@ -24,7 +27,7 @@ interface ImageModalProps {
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
-const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToImage, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToImage, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet, onDeletePost, onReportPost, onReportComment }) => {
   if (!post || !post.author) {
     return null;
   }
@@ -38,6 +41,9 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
   const commentInputRef = useRef<HTMLInputElement>(null);
   const pickerTimeout = useRef<number | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   const isMobile = window.innerWidth < 768;
 
@@ -194,6 +200,7 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
                       onReact={(commentId, emoji) => post && onReactToComment(post.id, commentId, emoji)}
                       onEdit={(commentId, newText) => post && onEditComment(post.id, commentId, newText)}
                       onDelete={(commentId) => post && onDeleteComment(post.id, commentId)}
+                      onReport={onReportComment}
                       isReply={isReply}
                   />
               </div>
@@ -280,13 +287,29 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
 
       <aside className={`w-full h-auto md:h-auto md:w-[380px] flex-shrink-0 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700/50 flex flex-col transition-opacity ${isLoading ? 'opacity-50' : 'opacity-100'}`} onClick={(e) => e.stopPropagation()}>
           <header className="p-4 border-b border-slate-700">
-              <button onClick={() => onOpenProfile(post.author.username)} className="flex items-center gap-3 group">
-                <img src={post.author.avatarUrl} alt={post.author.name} className="w-12 h-12 rounded-full" />
-                <div>
-                  <p className="font-bold text-lg text-fuchsia-300 group-hover:underline">{post.author.name}</p>
-                  <p className="text-sm text-slate-400">{new Date(post.createdAt).toLocaleString()}</p>
+              <div className="flex items-start justify-between">
+                <button onClick={() => onOpenProfile(post.author.username)} className="flex items-center gap-3 group flex-grow">
+                    <img src={post.author.avatarUrl} alt={post.author.name} className="w-12 h-12 rounded-full" />
+                    <div>
+                    <p className="font-bold text-lg text-fuchsia-300 group-hover:underline">{post.author.name}</p>
+                    <p className="text-sm text-slate-400">{new Date(post.createdAt).toLocaleString()}</p>
+                    </div>
+                </button>
+                <div className="relative" ref={actionMenuRef}>
+                    <button onClick={() => setIsActionMenuOpen(p => !p)}>
+                        <Icon name="ellipsis-vertical" className="w-6 h-6 text-slate-400" />
+                    </button>
+                    {isActionMenuOpen && (
+                        <div className="absolute top-full right-0 mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 text-sm font-semibold">
+                            {post.author.id === currentUser.id ? (
+                                <button onClick={() => onDeletePost(post.id)} className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10">Delete Post</button>
+                            ) : (
+                                <button onClick={() => onReportPost(post)} className="w-full text-left px-4 py-2 text-yellow-400 hover:bg-yellow-500/10">Report Post</button>
+                            )}
+                        </div>
+                    )}
                 </div>
-              </button>
+              </div>
               {post.caption && (
                 <p className="text-slate-200 mt-3"><TaggedContent text={post.caption} onTagClick={onOpenProfile} /></p>
               )}

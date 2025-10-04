@@ -22,6 +22,8 @@ interface PostDetailScreenProps {
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onDeletePost: (postId: string) => void;
+  onReportPost: (post: Post) => void;
+  onReportComment: (comment: Comment) => void;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
@@ -31,7 +33,7 @@ interface PostDetailScreenProps {
   onGoBack: () => void;
 }
 
-const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments, onDeletePost }) => {
+const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments, onDeletePost, onReportPost, onReportComment }) => {
   const [post, setPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -217,6 +219,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
                       onReact={(commentId, emoji) => onReactToComment(post.id, commentId, emoji)}
                       onEdit={(commentId, newText) => onEditComment(post.id, commentId, newText)}
                       onDelete={(commentId) => onDeleteComment(post.id, commentId)}
+                      onReport={onReportComment}
                       isReply={isReply}
                   />
               </div>
@@ -259,6 +262,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
           onSharePost={onSharePost}
           onOpenPhotoViewer={onOpenPhotoViewer}
           onDeletePost={onDeletePost}
+          onReportPost={onReportPost}
         />
 
         <div className="bg-slate-800/50 rounded-xl p-4">

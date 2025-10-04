@@ -14,12 +14,13 @@ interface CommentCardProps {
   onReact: (commentId: string, emoji: string) => void;
   onEdit?: (commentId: string, newText: string) => void;
   onDelete?: (commentId: string) => void;
+  onReport?: (comment: Comment) => void;
   isReply?: boolean;
 }
 
 const AVAILABLE_REACTIONS = ['❤️', '😂', '👍', '😢', '😡', '🔥', '😮'];
 
-const CommentCard: React.FC<CommentCardProps> = ({ comment, currentUser, isPlaying, onPlayPause, onAuthorClick, onReply, onReact, onEdit, onDelete }) => {
+const CommentCard: React.FC<CommentCardProps> = ({ comment, currentUser, isPlaying, onPlayPause, onAuthorClick, onReply, onReact, onEdit, onDelete, onReport }) => {
   if (!comment || !comment.author) {
     return null;
   }
@@ -112,6 +113,12 @@ const CommentCard: React.FC<CommentCardProps> = ({ comment, currentUser, isPlayi
       }
   };
 
+  const handleReport = () => {
+      if (onReport) {
+          onReport(comment);
+      }
+  };
+
   const renderContent = () => {
     switch(comment.type) {
         case 'text':
@@ -187,6 +194,12 @@ const CommentCard: React.FC<CommentCardProps> = ({ comment, currentUser, isPlayi
                         <button onClick={handleEdit} className="font-semibold hover:underline">Edit</button>
                         <span className="text-slate-500">•</span>
                         <button onClick={handleDelete} className="font-semibold hover:underline text-red-400">Delete</button>
+                    </>
+                )}
+                {!isAuthor && onReport && (
+                    <>
+                        <span className="text-slate-500">•</span>
+                        <button onClick={handleReport} className="font-semibold hover:underline text-yellow-400">Report</button>
                     </>
                 )}
             </div>

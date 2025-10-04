@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, Conversation, AppView, Message } from '../types';
 import Icon from './Icon';
@@ -269,7 +268,7 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Changed Array.from to spread syntax for better type inference to resolve unknown[] vs string[] error.
+      // FIX: Changed Array.from to spread syntax to ensure the type is correctly inferred as string[] instead of unknown[].
       await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
   };
 

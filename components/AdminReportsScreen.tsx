@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Report, Post, User, Comment } from '../types';
 import { geminiService } from '../services/geminiService';
@@ -123,7 +122,7 @@ const AdminReportsScreen: React.FC = () => {
                                         <button onClick={() => handleAction(report.id, 'Content Deleted', () => geminiService.deletePostAsAdmin(report.reportedContentId))} className="px-3 py-2 text-sm rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-semibold">Delete Post</button>
                                     }
                                     {report.reportedContentType === 'comment' && 
-                                        <button onClick={() => handleAction(report.id, 'Content Deleted', () => geminiService.deleteCommentAsAdmin(report.reportedContentId, report.reportedContentId))} className="px-3 py-2 text-sm rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-semibold">Delete Comment</button>
+                                        <button onClick={() => handleAction(report.id, 'Content Deleted', () => geminiService.deleteCommentAsAdmin(report.reportedContentId, "unknown"))} className="px-3 py-2 text-sm rounded-md bg-yellow-600 hover:bg-yellow-500 text-white font-semibold">Delete Comment</button>
                                     }
                                     
                                     <button onClick={() => handleAction(report.id, 'User Suspended (7d)', () => geminiService.suspendUserCommenting(report.reportedUserId, 7))} className="px-3 py-2 text-sm rounded-md bg-orange-600 hover:bg-orange-500 text-white font-semibold">Suspend User (7d)</button>

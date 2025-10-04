@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AdminUser, User } from '../types';
+import { AdminUser, User, DashboardStats } from '../types';
 import AdminDashboardSidebar from './AdminDashboardSidebar';
 import AdminUserManagementScreen from './AdminUserManagementScreen';
 import AdminContentModerationScreen from './AdminContentModerationScreen';
@@ -17,16 +17,6 @@ interface AdminDashboardProps {
 }
 
 type AdminView = 'dashboard' | 'users' | 'content' | 'campaigns' | 'reports' | 'announcements' | 'transactions';
-
-interface DashboardStats {
-    totalUsers: number;
-    newUsersToday: number;
-    postsLast24h: number;
-    pendingCampaigns: number;
-    activeUsersNow: number;
-    pendingReports: number;
-    pendingPayments: number;
-}
 
 const StatCard: React.FC<{ icon: React.ComponentProps<typeof Icon>['name']; title: string; value: string; color: string }> = ({ icon, title, value, color }) => (
     <div className="bg-slate-800 p-6 rounded-lg flex items-center gap-4">
@@ -60,7 +50,7 @@ const DashboardComponent: React.FC<{ onNavigate: (view: AdminView) => void }> = 
     useEffect(() => {
         const fetchStats = () => {
             geminiService.getAdminDashboardStats().then(data => {
-                setStats(data as DashboardStats);
+                setStats(data);
                 setIsLoading(false);
             });
         };
@@ -145,7 +135,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ adminUser, onLogout }) 
     };
 
     return (
-        <div className="h-screen w-screen bg-slate-900 flex flex-col md:flex-row font-sans text-white">
+        <div className="h-full w-screen bg-slate-900 flex flex-col md:flex-row font-sans text-white">
             <AdminDashboardSidebar 
                 adminUser={adminUser}
                 activeView={activeView}

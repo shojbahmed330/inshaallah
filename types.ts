@@ -434,3 +434,13 @@ export interface LiveVideoRoomMessage {
   text: string;
   createdAt: string;
 }
+
+export interface DashboardStats {
+    totalUsers: number;
+    newUsersToday: number;
+    postsLast24h: number;
+    pendingCampaigns: number;
+    activeUsersNow: number;
+    pendingReports: number;
+    pendingPayments: number;
+}
