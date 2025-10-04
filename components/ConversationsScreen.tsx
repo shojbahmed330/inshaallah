@@ -268,7 +268,7 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Changed Array.from to spread syntax to ensure the type is correctly inferred as string[] instead of unknown[].
+      // FIX: Using spread syntax to correctly convert Set<string> to string[] which is expected by updateProfileLists. Array.from was incorrectly inferring unknown[].
       await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
   };
 

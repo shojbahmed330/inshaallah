@@ -2216,8 +2216,51 @@ export const firebaseService = {
     getGroupEvents: async (groupId) => [],
     createGroupEvent: async (creator, groupId, title, description, date) => null,
     rsvpToEvent: async (userId, eventId) => true,
-    adminLogin: async (email, password) => null,
-    adminRegister: async (email, password) => null,
+    adminLogin: async (email, password) => {
+        try {
+            const adminsRef = collection(db, 'admins');
+            const q = query(adminsRef, where("email", "==", email.toLowerCase()));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                return null; // No admin with this email
+            }
+
+            const adminDoc = querySnapshot.docs[0];
+            const adminData = adminDoc.data();
+
+            if (adminData.password === password) {
+                return { id: adminDoc.id, email: adminData.email };
+            }
+
+            return null; // Incorrect password
+        } catch (error) {
+            console.error("Admin login error:", error);
+            return null;
+        }
+    },
+    adminRegister: async (email, password) => {
+        try {
+            const adminsRef = collection(db, 'admins');
+            const q = query(adminsRef, where("email", "==", email.toLowerCase()));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                return null; // Admin with this email already exists
+            }
+
+            const newAdminDocRef = await addDoc(adminsRef, {
+                email: email.toLowerCase(),
+                password: password, // In a real app, hash this password
+                createdAt: serverTimestamp(),
+            });
+
+            return { id: newAdminDocRef.id, email: email.toLowerCase() };
+        } catch (error) {
+            console.error("Admin registration error:", error);
+            return null;
+        }
+    },
     getAdminDashboardStats: async () => ({ totalUsers: 0, newUsersToday: 0, postsLast24h: 0, pendingCampaigns: 0, activeUsersNow: 0, pendingReports: 0, pendingPayments: 0 }),
     getAllUsersForAdmin: async () => {
         const snapshot = await getDocs(collection(db, 'users'));
