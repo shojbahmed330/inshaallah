@@ -291,7 +291,7 @@ export const firebaseService = {
                 const usernameDoc = await getDoc(usernameDocRef);
                 if (!usernameDoc.exists()) throw new Error("Invalid details.");
                 const userId = usernameDoc.data()!.userId;
-                const userProfile = await this.getUserProfileById(userId);
+                const userProfile = await firebaseService.getUserProfileById(userId);
                 if (!userProfile) throw new Error("User profile not found.");
                 emailToSignIn = userProfile.email;
             } catch (error: any) {
@@ -309,7 +309,7 @@ export const firebaseService = {
     async signOutUser(userId: string | null): Promise<void> {
         if (userId) {
             try {
-                await this.updateUserOnlineStatus(userId, 'offline');
+                await firebaseService.updateUserOnlineStatus(userId, 'offline');
             } catch(e: any) {
                 console.error("Could not set user offline before signing out, but proceeding with sign out.", e);
             }
@@ -459,8 +459,8 @@ export const firebaseService = {
             return { success: false, reason: 'not_signed_in' };
         }
         
-        const sender = await this.getUserProfileById(currentUserId);
-        const receiver = await this.getUserProfileById(targetUserId);
+        const sender = await firebaseService.getUserProfileById(currentUserId);
+        const receiver = await firebaseService.getUserProfileById(targetUserId);
 
         if (!sender || !receiver) return { success: false, reason: 'user_not_found' };
         
@@ -541,7 +541,7 @@ export const firebaseService = {
     },
     
     async checkFriendshipStatus(currentUserId: string, profileUserId: string): Promise<FriendshipStatus> {
-        const user = await this.getUserProfileById(currentUserId);
+        const user = await firebaseService.getUserProfileById(currentUserId);
         if (user?.friendIds?.includes(profileUserId)) {
             return FriendshipStatus.FRIENDS;
         }
@@ -586,19 +586,19 @@ export const firebaseService = {
     },
 
     async getFriends(userId: string): Promise<User[]> {
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user || !user.friendIds || user.friendIds.length === 0) {
             return [];
         }
-        return this.getUsersByIds(user.friendIds);
+        return firebaseService.getUsersByIds(user.friendIds);
     },
 
     async getCommonFriends(userId1: string, userId2: string): Promise<User[]> {
         if (userId1 === userId2) return [];
   
         const [user1Doc, user2Doc] = await Promise.all([
-            this.getUserProfileById(userId1),
-            this.getUserProfileById(userId2)
+            firebaseService.getUserProfileById(userId1),
+            firebaseService.getUserProfileById(userId2)
         ]);
   
         if (!user1Doc || !user2Doc || !user1Doc.friendIds || !user2Doc.friendIds) {
@@ -611,7 +611,7 @@ export const firebaseService = {
             return [];
         }
   
-        return this.getUsersByIds(commonFriendIds);
+        return firebaseService.getUsersByIds(commonFriendIds);
     },
 
     // --- Posts ---
@@ -705,41 +705,49 @@ export const firebaseService = {
 
     listenToReelsPosts(currentUserId: string, callback: (posts: Post[]) => void): () => void {
         const postsRef = collection(db, 'posts');
-        const reels: Map<string, Post> = new Map();
-    
+        const reelsMap = new Map<string, Post>();
+        const unsubscribes: (() => void)[] = [];
+
         const processAndCallback = () => {
-            const allReels = Array.from(reels.values())
+            const allReels = Array.from(reelsMap.values())
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             callback(allReels);
         };
     
-        // Query 1: Public Reels (secure)
+        const createListener = (q: any, source: string) => {
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === 'removed') {
+                        reelsMap.delete(change.doc.id);
+                    } else {
+                        reelsMap.set(change.doc.id, docToPost(change.doc));
+                    }
+                });
+                processAndCallback();
+            }, (error) => console.error(`Error fetching reels from ${source}:`, error));
+            unsubscribes.push(unsubscribe);
+        };
+
+        // Query 1: Public reels from anyone (excluding the current user to avoid duplicates)
         const publicQuery = query(postsRef,
             where('videoUrl', '!=', null),
             where('author.privacySettings.postVisibility', '==', 'public'),
             orderBy('createdAt', 'desc'),
             limit(50)
         );
-        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
-            snapshot.docs.forEach(doc => reels.set(doc.id, docToPost(doc)));
-            processAndCallback();
-        }, (error) => console.error("Error fetching public reels:", error));
+        createListener(publicQuery, 'public reels');
     
-        // Query 2: User's own Reels (secure)
+        // Query 2: User's own reels (of any visibility)
         const ownQuery = query(postsRef,
             where('videoUrl', '!=', null),
             where('author.id', '==', currentUserId),
             orderBy('createdAt', 'desc'),
             limit(50)
         );
-        const unsubOwn = onSnapshot(ownQuery, (snapshot) => {
-            snapshot.docs.forEach(doc => reels.set(doc.id, docToPost(doc)));
-            processAndCallback();
-        }, (error) => console.error("Error fetching own reels:", error));
+        createListener(ownQuery, 'own reels');
     
         return () => {
-            unsubPublic();
-            unsubOwn();
+            unsubscribes.forEach(unsub => unsub());
         };
     },
 
@@ -868,7 +876,7 @@ export const firebaseService = {
 
             const postData = postDoc.data() as Post;
             if (postData.author.id !== userId) {
-                const user = await this.getUserProfileById(userId);
+                const user = await firebaseService.getUserProfileById(userId);
                 if (user?.role !== 'admin') {
                      console.error("Permission denied: User is not the author or an admin.");
                      return false;
@@ -886,7 +894,7 @@ export const firebaseService = {
     
     async reactToPost(postId: string, userId: string, newReaction: string): Promise<boolean> {
         const postRef = doc(db, 'posts', postId);
-        const currentUser = await this.getUserProfileById(userId);
+        const currentUser = await firebaseService.getUserProfileById(userId);
         if (!currentUser) return false;
 
         try {
@@ -965,7 +973,7 @@ export const firebaseService = {
 
     async reactToComment(postId: string, commentId: string, userId: string, newReaction: string): Promise<boolean> {
         const postRef = doc(db, 'posts', postId);
-        const currentUser = await this.getUserProfileById(userId);
+        const currentUser = await firebaseService.getUserProfileById(userId);
         if (!currentUser) return false;
     
         try {
@@ -1229,12 +1237,12 @@ export const firebaseService = {
         try {
             if (!enrichedUser1.username) {
                 console.warn(`Incomplete current user object (ID: ${enrichedUser1.id}). Fetching full profile.`);
-                const fullProfile = await this.getUserProfileById(enrichedUser1.id);
+                const fullProfile = await firebaseService.getUserProfileById(enrichedUser1.id);
                 if (fullProfile) enrichedUser1 = fullProfile;
             }
             if (!enrichedUser2.username) {
                 console.warn(`Incomplete peer user object (ID: ${enrichedUser2.id}). Fetching full profile.`);
-                const fullProfile = await this.getUserProfileById(enrichedUser2.id);
+                const fullProfile = await firebaseService.getUserProfileById(enrichedUser2.id);
                 if (fullProfile) enrichedUser2 = fullProfile;
             }
             
@@ -1435,7 +1443,7 @@ export const firebaseService = {
         const batch = writeBatch(db);
         snapshot.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
-        return this.deleteChatHistory(chatId);
+        return firebaseService.deleteChatHistory(chatId);
     },
 
     async getChatSettings(chatId: string): Promise<ChatSettings | null> {
@@ -1705,7 +1713,7 @@ export const firebaseService = {
         const matchingCampaign = campaigns.find(c => matchesTargeting(c, currentUser));
 
         if (matchingCampaign) {
-            const sponsor = await this.getUserProfileById(matchingCampaign.sponsorId);
+            const sponsor = await firebaseService.getUserProfileById(matchingCampaign.sponsorId);
             if (!sponsor) return null;
 
             return {
@@ -1735,7 +1743,7 @@ export const firebaseService = {
         const matchingCampaign = campaigns.find(c => matchesTargeting(c, currentUser));
 
         if (matchingCampaign) {
-            const sponsor = await this.getUserProfileById(matchingCampaign.sponsorId);
+            const sponsor = await firebaseService.getUserProfileById(matchingCampaign.sponsorId);
             if (!sponsor) return null;
 
             return {
@@ -1765,7 +1773,7 @@ export const firebaseService = {
     // --- Groups (missing function) ---
     async leaveGroup(userId: string, groupId: string): Promise<boolean> {
         const groupRef = doc(db, 'groups', groupId);
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user) return false;
         const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
         try {
@@ -1796,21 +1804,21 @@ export const firebaseService = {
         });
     },
     async joinLiveAudioRoom(userId: string, roomId: string): Promise<void> {
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user) return;
         const roomRef = doc(db, 'liveAudioRooms', roomId);
         const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
         await updateDoc(roomRef, { listeners: arrayUnion(author) });
     },
     async joinLiveVideoRoom(userId: string, roomId: string): Promise<void> {
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user) return;
         const roomRef = doc(db, 'liveVideoRooms', roomId);
         const participantState: VideoParticipantState = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username, isMuted: true, isCameraOff: true };
         await updateDoc(roomRef, { participants: arrayUnion(participantState) });
     },
     async leaveLiveAudioRoom(userId: string, roomId: string): Promise<void> {
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user) return;
         const roomRef = doc(db, 'liveAudioRooms', roomId);
         const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
@@ -1862,7 +1870,7 @@ export const firebaseService = {
         const roomRef = doc(db, 'liveAudioRooms', roomId);
         const roomDoc = await getDoc(roomRef);
         if (!roomDoc.exists() || roomDoc.data().host.id !== hostId) return;
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user) return;
         const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
         await updateDoc(roomRef, {
@@ -1875,7 +1883,7 @@ export const firebaseService = {
         const roomRef = doc(db, 'liveAudioRooms', roomId);
         const roomDoc = await getDoc(roomRef);
         if (!roomDoc.exists() || roomDoc.data().host.id !== hostId) return;
-        const user = await this.getUserProfileById(userId);
+        const user = await firebaseService.getUserProfileById(userId);
         if (!user) return;
         const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
         await updateDoc(roomRef, {
@@ -2255,7 +2263,7 @@ export const firebaseService = {
     rejectPost: async (postId: string) => firebaseService.rejectPost(postId),
     joinGroup: async (userId, groupId, answers) => {
          const groupRef = doc(db, 'groups', groupId);
-         const user = await this.getUserProfileById(userId);
+         const user = await firebaseService.getUserProfileById(userId);
          if (!user) return false;
          const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
          const groupDoc = await getDoc(groupRef);

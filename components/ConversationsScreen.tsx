@@ -268,8 +268,8 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Use `Array.from()` instead of spread syntax (`...`) to convert Set to Array, ensuring correct type inference and resolving the 'unknown[] is not assignable to string[]' error.
-      await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) });
+      // FIX: Using spread syntax for better type inference from Set to Array.
+      await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
   };
 
   const handleArchiveToggle = async (peerId: string, withUndo: boolean = false) => {
@@ -300,8 +300,8 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Use `Array.from()` instead of spread syntax (`...`) to convert Set to Array, ensuring correct type inference and resolving the 'unknown[] is not assignable to string[]' error.
-      updateProfileLists({ archivedChatIds: Array.from(newArchivedIds), pinnedChatIds: Array.from(newPinnedIds) });
+      // FIX: Using spread syntax for better type inference from Set to Array.
+      updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
   };
   
   const handleDeleteChat = (peerId: string) => {
