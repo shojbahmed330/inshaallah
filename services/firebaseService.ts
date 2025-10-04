@@ -2311,68 +2311,22 @@ export const firebaseService = {
     },
     listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
         const groupsRef = collection(db, 'groups');
-        const groupsMap = new Map<string, Group>();
-        const unsubscribes: (() => void)[] = [];
-    
-        const processAndCallback = () => {
-            const allGroups = Array.from(groupsMap.values())
-                .sort((a, b) => a.name.localeCompare(b.name));
-            callback(allGroups);
-        };
-    
-        // Query 1: All public groups. This query is safe and should always succeed.
-        const publicQuery = query(groupsRef, where('privacy', '==', 'public'));
-        const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
-            snapshot.docChanges().forEach(change => {
-                if (change.type === 'removed') {
-                    groupsMap.delete(change.doc.id);
-                } else {
-                    const data = change.doc.data();
-                    groupsMap.set(change.doc.id, {
-                        id: change.doc.id,
-                        ...data,
-                        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                    } as Group);
-                }
+        const q = query(groupsRef, where('memberIds', 'array-contains', userId));
+        
+        return onSnapshot(q, (snapshot) => {
+            const userGroups = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+                } as Group;
             });
-            processAndCallback(); // Provide data quickly
+            callback(userGroups);
         }, (error) => {
-            console.error("Critical error fetching public groups:", error);
-            // Even if public fails, we might still get private ones.
-            processAndCallback(); 
+            console.warn("Could not fetch user's groups due to permissions or data inconsistency.", error.message);
+            callback([]); // Return empty array on error to avoid crashes
         });
-        unsubscribes.push(unsubPublic);
-    
-        // Query 2: Private groups where the user is a member. This query might fail due to security rules if not set up correctly.
-        // It requires a composite index on ('privacy', 'memberIds').
-        const privateMemberQuery = query(groupsRef, 
-            where('privacy', '==', 'private'),
-            where('memberIds', 'array-contains', userId)
-        );
-        const unsubPrivate = onSnapshot(privateMemberQuery, (snapshot) => {
-            snapshot.docChanges().forEach(change => {
-                if (change.type === 'removed') {
-                    groupsMap.delete(change.doc.id);
-                } else {
-                    const data = change.doc.data();
-                    groupsMap.set(change.doc.id, {
-                        id: change.doc.id,
-                        ...data,
-                        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                    } as Group);
-                }
-            });
-            processAndCallback(); // Callback with the full merged list
-        }, (error) => {
-            // GRACEFUL FAILURE: If this fails, log the error but don't crash the app.
-            // The user will still see public groups.
-            console.warn("Could not fetch private groups. This might be due to Firestore security rules. Only public groups will be shown.", error.message);
-        });
-        unsubscribes.push(unsubPrivate);
-    
-        return () => {
-            unsubscribes.forEach(unsub => unsub());
-        };
     },
 
     listenToGroup(groupId: string, callback: (group: Group | null) => void): () => void {
@@ -2388,6 +2342,9 @@ export const firebaseService = {
             } else {
                 callback(null);
             }
+        }, (error) => {
+            console.error(`Error listening to group ${groupId}:`, error);
+            callback(null);
         });
     },
 
@@ -2397,6 +2354,9 @@ export const firebaseService = {
         return onSnapshot(q, (snapshot) => {
             const posts = snapshot.docs.map(docToPost);
             callback(posts);
+        }, (error) => {
+            console.error(`Error listening to posts for group ${groupId}:`, error);
+            callback([]); // Return empty array on error
         });
     },
 
@@ -2413,18 +2373,19 @@ export const firebaseService = {
                     })),
                 } as GroupChat);
             } else {
-                // Document doesn't exist, create it on-demand.
                 console.log(`Group chat for ${groupId} not found, creating it.`);
                 setDoc(chatRef, { messages: [] })
                     .then(() => {
-                        // The listener will fire again, but we can provide an initial state to avoid "Loading..."
                          callback({ groupId, messages: [] });
                     })
                     .catch(err => {
                         console.error("Failed to auto-create group chat:", err);
-                        callback(null); // Creation failed
+                        callback(null);
                     });
             }
+        }, (error) => {
+            console.error(`Error listening to group chat ${groupId}:`, error);
+            callback(null);
         });
     },
     
