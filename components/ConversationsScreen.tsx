@@ -300,7 +300,7 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Changed Array.from to spread syntax for better type inference to resolve unknown[] vs string[] error.
+      // FIX: Using spread syntax to correctly convert Set<string> to string[] which is expected by updateProfileLists. Array.from was incorrectly inferring unknown[].
       updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
   };
   

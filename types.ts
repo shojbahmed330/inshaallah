@@ -69,6 +69,7 @@ export interface User {
   notificationSettings: NotificationSettings;
   blockedUserIds: string[];
   friendIds: string[];
+  groupIds?: string[];
   voiceCoins: number;
   createdAt: string | any; // Can be server timestamp
   onlineStatus: 'online' | 'offline';

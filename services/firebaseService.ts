@@ -64,12 +64,12 @@ const docToPost = (doc: DocumentSnapshot): Post => {
     } as Post;
 }
 
-const getDailyCollectionName = (date: Date | string): string => {
+const getDailyCollectionId = (date: Date | string): string => {
     const d = typeof date === 'string' ? new Date(date) : date;
     const year = d.getUTCFullYear();
     const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
     const day = d.getUTCDate().toString().padStart(2, '0');
-    return `notifications_${year}_${month}_${day}`;
+    return `${year}_${month}_${day}`;
 };
 
 const _createNotification = async (recipientId: string, type: Notification['type'], actor: User, options: Partial<Notification> = {}) => {
@@ -102,8 +102,8 @@ const _createNotification = async (recipientId: string, type: Notification['type
             return;
         }
         
-        const collectionName = getDailyCollectionName(new Date());
-        const notificationRef = collection(db, collectionName);
+        const dailyId = getDailyCollectionId(new Date());
+        const notificationRef = collection(db, 'notifications', dailyId, 'items');
         
         const actorInfo: Author = {
             id: actor.id,
@@ -260,6 +260,7 @@ export const firebaseService = {
                     blockedUserIds: [],
                     voiceCoins: 100,
                     friendIds: [],
+                    groupIds: [],
                     onlineStatus: 'offline',
                     // @ts-ignore
                     createdAt: serverTimestamp(),
@@ -349,9 +350,9 @@ export const firebaseService = {
         for (let i = 0; i < 30; i++) {
             const date = new Date();
             date.setDate(date.getDate() - i);
-            const collectionName = getDailyCollectionName(date);
+            const dailyId = getDailyCollectionId(date);
 
-            const notificationsRef = collection(db, collectionName);
+            const notificationsRef = collection(db, 'notifications', dailyId, 'items');
             const q = query(notificationsRef, where('recipientId', '==', userId));
             
             const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -364,14 +365,12 @@ export const firebaseService = {
                     } as Notification;
                 });
                 
-                dailyNotifications.set(collectionName, notifications);
+                dailyNotifications.set(dailyId, notifications);
                 processAndCallback();
             }, (error) => {
-                console.warn(`Could not listen to collection ${collectionName}. It may not exist yet.`, error.code);
-                // If a collection doesn't exist, it might throw a permission error if rules are strict.
-                // We'll just remove it from our map and continue.
-                if (dailyNotifications.has(collectionName)) {
-                    dailyNotifications.delete(collectionName);
+                console.warn(`Could not listen to collection for date ${dailyId}. It may not exist yet.`, error.code);
+                if (dailyNotifications.has(dailyId)) {
+                    dailyNotifications.delete(dailyId);
                     processAndCallback();
                 }
             });
@@ -387,20 +386,20 @@ export const firebaseService = {
     async markNotificationsAsRead(userId: string, notificationsToMark: Notification[]): Promise<void> {
         if (notificationsToMark.length === 0) return;
 
-        const groupedByCollection = new Map<string, string[]>();
+        const groupedByDay = new Map<string, string[]>();
         notificationsToMark.forEach(n => {
-            const collectionName = getDailyCollectionName(n.createdAt);
-            if (!groupedByCollection.has(collectionName)) {
-                groupedByCollection.set(collectionName, []);
+            const dailyId = getDailyCollectionId(n.createdAt);
+            if (!groupedByDay.has(dailyId)) {
+                groupedByDay.set(dailyId, []);
             }
-            groupedByCollection.get(collectionName)!.push(n.id);
+            groupedByDay.get(dailyId)!.push(n.id);
         });
 
         const batch = writeBatch(db);
 
-        groupedByCollection.forEach((ids, collectionName) => {
+        groupedByDay.forEach((ids, dailyId) => {
             ids.forEach(id => {
-                const docRef = doc(db, collectionName, id);
+                const docRef = doc(db, 'notifications', dailyId, 'items', id);
                 batch.update(docRef, { read: true });
             });
         });
@@ -1781,9 +1780,9 @@ export const firebaseService = {
         return null;
     },
 
-    // --- Groups (missing function) ---
     async leaveGroup(userId: string, groupId: string): Promise<boolean> {
         const groupRef = doc(db, 'groups', groupId);
+        const userRef = doc(db, 'users', userId);
         const user = await firebaseService.getUserProfileById(userId);
         if (!user) return false;
         const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
@@ -1795,6 +1794,7 @@ export const firebaseService = {
                 admins: arrayRemove(memberObject),
                 moderators: arrayRemove(memberObject),
             });
+            await updateDoc(userRef, { groupIds: arrayRemove(groupId) });
             return true;
         } catch (error) {
             console.error("Error leaving group:", error);
@@ -2175,6 +2175,9 @@ export const firebaseService = {
             };
             
             await setDoc(newGroupRef, newGroupData);
+
+            const creatorRef = doc(db, 'users', creator.id);
+            await updateDoc(creatorRef, { groupIds: arrayUnion(newGroupRef.id) });
     
             return {
                 id: newGroupRef.id,
@@ -2267,11 +2270,53 @@ export const firebaseService = {
     reactivateUserAsAdmin: async (userId) => true,
     promoteGroupMember: async (groupId: string, userToPromote: User, newRole: 'Admin' | 'Moderator') => firebaseService.promoteGroupMember(groupId, userToPromote, newRole),
     demoteGroupMember: async (groupId: string, userToDemote: User, oldRole: 'Admin' | 'Moderator') => firebaseService.demoteGroupMember(groupId, userToDemote, oldRole),
-    removeGroupMember: async (groupId: string, userToRemove: User) => firebaseService.removeGroupMember(groupId, userToRemove),
-    approveJoinRequest: async (groupId: string, userId: string) => firebaseService.approveJoinRequest(groupId, userId),
-    rejectJoinRequest: async (groupId: string, userId: string) => firebaseService.rejectJoinRequest(groupId, userId),
-    approvePost: async (postId: string) => firebaseService.approvePost(postId),
-    rejectPost: async (postId: string) => firebaseService.rejectPost(postId),
+    async removeGroupMember(groupId: string, userToRemove: User): Promise<boolean> {
+        const groupRef = doc(db, 'groups', groupId);
+        const userRef = doc(db, 'users', userToRemove.id);
+        const memberObject = { id: userToRemove.id, name: userToRemove.name, username: userToRemove.username, avatarUrl: userToRemove.avatarUrl };
+        try {
+            await updateDoc(groupRef, {
+                members: arrayRemove(memberObject),
+                memberIds: arrayRemove(userToRemove.id),
+                memberCount: increment(-1),
+                admins: arrayRemove(memberObject),
+                moderators: arrayRemove(memberObject),
+            });
+            await updateDoc(userRef, { groupIds: arrayRemove(groupId) });
+            return true;
+        } catch (error) {
+            console.error("Error removing group member:", error);
+            return false;
+        }
+    },
+    async approveJoinRequest(groupId: string, userId: string): Promise<void> {
+        const groupRef = doc(db, 'groups', groupId);
+        const userRef = doc(db, 'users', userId);
+        
+        await runTransaction(db, async (transaction) => {
+            const groupDoc = await transaction.get(groupRef);
+            const userDoc = await transaction.get(userRef);
+            if (!groupDoc.exists() || !userDoc.exists()) throw "Group or user not found";
+    
+            const groupData = groupDoc.data() as Group;
+            const userData = userDoc.data() as User;
+    
+            const updatedRequests = (groupData.joinRequests || []).filter(req => req.user.id !== userId);
+            const memberObject = { id: userData.id, name: userData.name, username: userData.username, avatarUrl: userData.avatarUrl };
+    
+            transaction.update(groupRef, {
+                joinRequests: updatedRequests,
+                members: arrayUnion(memberObject),
+                memberIds: arrayUnion(userId),
+                memberCount: increment(1)
+            });
+    
+            transaction.update(userRef, { groupIds: arrayUnion(groupId) });
+        });
+    },
+    rejectJoinRequest: async (groupId: string, userId: string) => true,
+    approvePost: async (postId: string) => true,
+    rejectPost: async (postId: string) => true,
     joinGroup: async (userId, groupId, answers) => {
          const groupRef = doc(db, 'groups', groupId);
          const user = await firebaseService.getUserProfileById(userId);
@@ -2287,6 +2332,8 @@ export const firebaseService = {
                  memberIds: arrayUnion(user.id),
                  memberCount: increment(1)
              });
+             const userRef = doc(db, 'users', userId);
+             await updateDoc(userRef, { groupIds: arrayUnion(groupId) });
          } else {
              const request = { user: memberObject, answers: answers || [] };
              await updateDoc(groupRef, { joinRequests: arrayUnion(request) });
@@ -2310,23 +2357,44 @@ export const firebaseService = {
         }
     },
     listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
-        const groupsRef = collection(db, 'groups');
-        const q = query(groupsRef, where('memberIds', 'array-contains', userId));
-        
-        return onSnapshot(q, (snapshot) => {
-            const userGroups = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    ...data,
-                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
-                } as Group;
-            });
-            callback(userGroups);
+        let groupsUnsubscribe = () => {};
+        const userUnsubscribe = onSnapshot(doc(db, 'users', userId), (userDoc) => {
+            groupsUnsubscribe(); // Cleanup previous groups listener
+    
+            if (userDoc.exists()) {
+                const groupIds = userDoc.data().groupIds || [];
+                if (groupIds.length > 0) {
+                    const q = query(collection(db, 'groups'), where(documentId(), 'in', groupIds));
+                    groupsUnsubscribe = onSnapshot(q, (groupsSnapshot) => {
+                        const groups = groupsSnapshot.docs.map(d => {
+                            const data = d.data();
+                            return {
+                                id: d.id,
+                                ...data,
+                                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+                            } as Group;
+                        });
+                        callback(groups);
+                    }, (error) => {
+                        console.warn("Could not fetch user's groups by ID list due to permissions.", error.message);
+                        callback([]);
+                    });
+                } else {
+                    callback([]); // User is in no groups
+                }
+            } else {
+                callback([]); // User document doesn't exist
+            }
         }, (error) => {
             console.warn("Could not fetch user's groups due to permissions or data inconsistency.", error.message);
-            callback([]); // Return empty array on error to avoid crashes
+            callback([]);
         });
+    
+        // Return a function that unsubscribes from both listeners
+        return () => {
+            userUnsubscribe();
+            groupsUnsubscribe();
+        };
     },
 
     listenToGroup(groupId: string, callback: (group: Group | null) => void): () => void {
