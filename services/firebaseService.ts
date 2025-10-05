@@ -1804,7 +1804,45 @@ export const firebaseService = {
             throw error;
         }
     },
-    getAdminDashboardStats: async () => ({ totalUsers: 0, newUsersToday: 0, postsLast24h: 0, pendingCampaigns: 0, activeUsersNow: 0, pendingReports: 0, pendingPayments: 0 }),
+    async getAdminDashboardStats() {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const usersQuery = getDocs(collection(db, 'users'));
+        const newUsersQuery = getDocs(query(collection(db, 'users'), where('createdAt', '>=', twentyFourHoursAgo)));
+        const activeUsersQuery = getDocs(query(collection(db, 'users'), where('onlineStatus', '==', 'online')));
+        const newPostsQuery = getDocs(query(collection(db, 'posts'), where('createdAt', '>=', twentyFourHoursAgo)));
+        const pendingCampaignsQuery = getDocs(query(collection(db, 'campaigns'), where('status', '==', 'pending')));
+        const pendingReportsQuery = getDocs(query(collection(db, 'reports'), where('status', '==', 'pending')));
+        const pendingPaymentsQuery = getDocs(query(collection(db, 'campaigns'), where('paymentStatus', '==', 'pending')));
+
+        const [
+            usersSnap,
+            newUsersSnap,
+            activeUsersSnap,
+            newPostsSnap,
+            pendingCampaignsSnap,
+            pendingReportsSnap,
+            pendingPaymentsSnap
+        ] = await Promise.all([
+            usersQuery,
+            newUsersQuery,
+            activeUsersQuery,
+            newPostsQuery,
+            pendingCampaignsQuery,
+            pendingReportsQuery,
+            pendingPaymentsQuery
+        ]);
+
+        return {
+            totalUsers: usersSnap.size,
+            newUsersToday: newUsersSnap.size,
+            activeUsersNow: activeUsersSnap.size,
+            postsLast24h: newPostsSnap.size,
+            pendingCampaigns: pendingCampaignsSnap.size,
+            pendingReports: pendingReportsSnap.size,
+            pendingPayments: pendingPaymentsSnap.size
+        };
+    },
     getAllUsersForAdmin: async () => {
         const snapshot = await getDocs(collection(db, 'users'));
         return snapshot.docs.map(docToUser);
@@ -1831,12 +1869,56 @@ export const firebaseService = {
             await _createNotification(campaign.sponsorId, 'campaign_rejected', actor, { campaignName: campaign.sponsorName, rejectionReason: reason });
         }
     },
-    getAllPostsForAdmin: async () => [],
-    deletePostAsAdmin: async (postId) => true,
-    deleteCommentAsAdmin: async (commentId, postId) => true,
-    getPostById: async (postId) => null,
-    getPendingReports: async () => [],
-    resolveReport: async (reportId, resolution) => {},
+    async getAllPostsForAdmin() {
+        const snapshot = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
+        return snapshot.docs.map(docToPost);
+    },
+    async deletePostAsAdmin(postId: string): Promise<boolean> {
+        try {
+            await deleteDoc(doc(db, 'posts', postId));
+            return true;
+        } catch (error) {
+            console.error("Admin failed to delete post:", error);
+            return false;
+        }
+    },
+    async deleteCommentAsAdmin(commentId: string, postId: string): Promise<boolean> {
+        const postRef = doc(db, 'posts', postId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const postDoc = await transaction.get(postRef);
+                if (!postDoc.exists()) throw "Post not found";
+                const comments = postDoc.data().comments.filter(c => c.id !== commentId);
+                transaction.update(postRef, { comments, commentCount: increment(-1) });
+            });
+            return true;
+        } catch (error) {
+            console.error("Admin failed to delete comment:", error);
+            return false;
+        }
+    },
+    async getPostById(postId: string): Promise<Post | null> {
+        const postRef = doc(db, 'posts', postId);
+        const postDoc = await getDoc(postRef);
+        return postDoc.exists() ? docToPost(postDoc) : null;
+    },
+    async getPendingReports(): Promise<Report[]> {
+        const reportsRef = collection(db, 'reports');
+        const q = query(reportsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
+        } as Report));
+    },
+    async resolveReport(reportId: string, resolution: string): Promise<void> {
+        const reportRef = doc(db, 'reports', reportId);
+        await updateDoc(reportRef, {
+            status: 'resolved',
+            resolution: resolution,
+        });
+    },
     async banUser(userId: string): Promise<boolean> {
         const userRef = doc(db, 'users', userId);
         try {
@@ -1923,7 +2005,35 @@ export const firebaseService = {
             return false;
         }
     },
-    getUserDetailsForAdmin: async (userId) => null,
+    async getUserDetailsForAdmin(userId: string) {
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return null;
+
+        const postsQuery = query(collection(db, 'posts'), where('author.id', '==', userId), orderBy('createdAt', 'desc'), limit(20));
+        const reportsQuery = query(collection(db, 'reports'), where('reportedUserId', '==', userId), orderBy('createdAt', 'desc'), limit(20));
+        
+        // This is inefficient but necessary for this feature without schema changes
+        const allPostsQuery = getDocs(collection(db, 'posts'));
+
+        const [postsSnap, reportsSnap, allPostsSnap] = await Promise.all([getDocs(postsQuery), getDocs(reportsQuery), allPostsQuery]);
+        
+        const posts = postsSnap.docs.map(docToPost);
+        const reports = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
+        
+        const comments: CommentType[] = [];
+        allPostsSnap.forEach(postDoc => {
+            const postData = postDoc.data();
+            if (postData.comments && Array.isArray(postData.comments)) {
+                postData.comments.forEach((comment: any) => {
+                    if (comment.author && comment.author.id === userId) {
+                        comments.push({ ...comment, postId: postDoc.id });
+                    }
+                });
+            }
+        });
+
+        return { user, posts, comments, reports };
+    },
     sendSiteWideAnnouncement: async (message) => true,
     getAllCampaignsForAdmin: async () => [],
     verifyCampaignPayment: async (campaignId, adminId) => true,
