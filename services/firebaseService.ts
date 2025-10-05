@@ -902,6 +902,26 @@ export const firebaseService = {
         }
     },
 
+    async getPostsByIds(postIds: string[]): Promise<Post[]> {
+        if (postIds.length === 0) return [];
+        const postsRef = collection(db, 'posts');
+        const postPromises: Promise<QuerySnapshot>[] = [];
+        // Chunk the postIds array into chunks of 10 to stay within Firestore's limits for 'in' queries.
+        for (let i = 0; i < postIds.length; i += 10) {
+            const chunk = postIds.slice(i, i + 10);
+            if (chunk.length > 0) {
+                const q = query(postsRef, where(documentId(), 'in', chunk));
+                postPromises.push(getDocs(q));
+            }
+        }
+        const postSnapshots = await Promise.all(postPromises);
+        const posts: Post[] = [];
+        postSnapshots.forEach(snapshot => {
+            snapshot.docs.forEach(doc => posts.push(docToPost(doc)));
+        });
+        return posts;
+    },
+
     async savePost(userId: string, postId: string): Promise<boolean> {
         const userRef = doc(db, 'users', userId);
         try {
