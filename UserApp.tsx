@@ -262,6 +262,29 @@ const UserApp: React.FC = () => {
     });
   }, [user]);
 
+  const handleOpenProfile = useCallback((username: string) => navigate(AppView.PROFILE, { username }), [navigate]);
+  
+  const handleNavigation = useCallback((viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'menu') => {
+    setNotificationPanelOpen(false);
+    switch(viewName) {
+        case 'feed': setViewStack([{ view: AppView.FEED }]); break;
+        case 'explore': setViewStack([{ view: AppView.EXPLORE }]); break;
+        case 'reels': setViewStack([{ view: AppView.REELS }]); break;
+        case 'friends': setViewStack([{ view: AppView.FRIENDS }]); break;
+        case 'settings': navigate(AppView.SETTINGS); break;
+        case 'profile': if (user) navigate(AppView.PROFILE, { username: user.username }); break;
+        case 'messages': setViewStack([{ view: AppView.CONVERSATIONS }]); break;
+        case 'ads_center': setViewStack([{ view: AppView.ADS_CENTER }]); break;
+        case 'rooms': setViewStack([{ view: AppView.ROOMS_HUB }]); break;
+        case 'groups': setViewStack([{ view: AppView.GROUPS_HUB }]); break;
+        case 'menu': navigate(AppView.MOBILE_MENU); break;
+    }
+  }, [user, navigate]);
+
+  const handleStartCreatePost = useCallback((props: any = {}) => {
+    navigate(AppView.CREATE_POST, props);
+  }, [navigate]);
+
   useEffect(() => {
     if (!user) return;
 
@@ -584,6 +607,70 @@ const UserApp: React.FC = () => {
     setVoiceState(VoiceState.IDLE);
   }, []);
 
+  // Global Command Handler
+  useEffect(() => {
+      if (!lastCommand) return;
+  
+      const handleGlobalCommands = async () => {
+          const userNames = friends.map(f => f.name);
+          const groupNames = groups.map(g => g.name);
+  
+          const { intent, slots } = await geminiService.processIntent(lastCommand, { userNames, groupNames });
+  
+          let commandHandled = true;
+          switch (intent) {
+              case 'intent_open_feed': handleNavigation('feed'); setTtsMessage("Going to your feed."); break;
+              case 'intent_open_explore': handleNavigation('explore'); setTtsMessage("Opening Explore."); break;
+              case 'intent_open_reels': handleNavigation('reels'); setTtsMessage("Opening Reels."); break;
+              case 'intent_open_friends_page': handleNavigation('friends'); setTtsMessage("Opening friends list."); break;
+              case 'intent_open_my_profile': if (user) { handleNavigation('profile'); setTtsMessage("Opening your profile."); } break;
+              case 'intent_open_messages': handleNavigation('messages'); setTtsMessage("Opening messages."); break;
+              case 'intent_open_rooms_hub': handleNavigation('rooms'); setTtsMessage("Opening Rooms Hub."); break;
+              case 'intent_open_groups_hub': handleNavigation('groups'); setTtsMessage("Opening Groups Hub."); break;
+              case 'intent_open_settings': handleNavigation('settings'); setTtsMessage("Opening settings."); break;
+              case 'intent_open_ads_center': handleNavigation('ads_center'); setTtsMessage("Opening Ads Center."); break;
+              case 'intent_open_profile':
+                  if (slots?.target_name) {
+                      handleOpenProfile(slots.target_name as string);
+                      setTtsMessage(`Opening profile for ${slots.target_name}.`);
+                  }
+                  break;
+              
+              case 'intent_go_back': goBack(); setTtsMessage("Going back."); break;
+              case 'intent_reload_page': window.location.reload(); break;
+  
+              case 'intent_create_voice_post': handleStartCreatePost({ startRecording: true }); setTtsMessage("Starting a new voice post."); break;
+              case 'intent_create_photo_post': handleStartCreatePost({ selectMedia: 'image' }); setTtsMessage("Select a photo for your post."); break;
+              case 'intent_create_video_post': handleStartCreatePost({ selectMedia: 'video' }); setTtsMessage("Select a video for your post."); break;
+              case 'intent_create_story': navigate(AppView.CREATE_STORY); setTtsMessage("Let's create a story."); break;
+              case 'intent_create_story_with_text': navigate(AppView.CREATE_STORY, { initialText: slots?.text_content || '' }); break;
+              case 'intent_create_text_post': handleStartCreatePost({ caption: slots?.caption || '' }); break;
+  
+              case 'intent_search_user':
+                  if (slots?.target_name) {
+                      const query = slots.target_name as string;
+                      const results = await geminiService.searchUsers(query);
+                      setSearchResults(results);
+                      navigate(AppView.SEARCH_RESULTS, { query });
+                      setHeaderSearchQuery('');
+                      setIsMobileSearchOpen(false);
+                      setTtsMessage(`Searching for ${query}.`);
+                  }
+                  break;
+              
+              default:
+                  commandHandled = false;
+          }
+  
+          if (commandHandled) {
+              handleCommandProcessed();
+          }
+      };
+  
+      handleGlobalCommands();
+  }, [lastCommand, friends, groups, user, handleNavigation, goBack, handleStartCreatePost, navigate, setTtsMessage, handleOpenProfile, handleCommandProcessed]);
+
+
   const handleMicClick = useCallback(() => {
     if (isChatRecording) {
       setTtsMessage("In-chat voice message is currently recording.");
@@ -892,10 +979,6 @@ const UserApp: React.FC = () => {
         setTtsMessage(getTtsPrompt('lead_form_error', language));
     }
   };
-
-  const handleStartCreatePost = (props: any = {}) => {
-    navigate(AppView.CREATE_POST, props);
-  };
   
   const handlePostCreated = (newPost: Post | null) => {
     goBack();
@@ -1042,8 +1125,6 @@ const UserApp: React.FC = () => {
     }
   };
 
-  const handleOpenProfile = (username: string) => navigate(AppView.PROFILE, { username });
-  const handleViewPost = (postId: string) => navigate(AppView.POST_DETAILS, { postId });
   const handleEditProfile = () => navigate(AppView.SETTINGS, { ttsMessage: getTtsPrompt('settings_opened', language) });
   
   const handleBlockUser = async (userToBlock: User) => {
@@ -1073,23 +1154,6 @@ const UserApp: React.FC = () => {
           handleLogout();
       }
   };
-
-  const handleNavigation = (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'menu') => {
-    setNotificationPanelOpen(false);
-    switch(viewName) {
-        case 'feed': setViewStack([{ view: AppView.FEED }]); break;
-        case 'explore': setViewStack([{ view: AppView.EXPLORE }]); break;
-        case 'reels': setViewStack([{ view: AppView.REELS }]); break;
-        case 'friends': setViewStack([{ view: AppView.FRIENDS }]); break;
-        case 'settings': navigate(AppView.SETTINGS); break;
-        case 'profile': if (user) navigate(AppView.PROFILE, { username: user.username }); break;
-        case 'messages': setViewStack([{ view: AppView.CONVERSATIONS }]); break;
-        case 'ads_center': setViewStack([{ view: AppView.ADS_CENTER }]); break;
-        case 'rooms': setViewStack([{ view: AppView.ROOMS_HUB }]); break;
-        case 'groups': setViewStack([{ view: AppView.GROUPS_HUB }]); break;
-        case 'menu': navigate(AppView.MOBILE_MENU); break;
-    }
-  }
   
   const handleHeaderSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -20,121 +20,121 @@ Your response MUST be a single, valid JSON object and nothing else.
 
 The JSON object must have:
 1. An "intent" field: A string matching one of the intents from the list below.
-2. An optional "slots" object: For intents that require extra information (like a name or number).
+2. An optional "slots" object: For intents that require extra information (like a name, number, or text content).
 
 If the user's intent is unclear or not in the list, you MUST use the intent "unknown".
 
-Example Bengali commands:
-- "পাসওয়ার্ড পরিবর্তন কর" -> { "intent": "intent_change_password" }
-- "আমার অ্যাকাউন্ট নিষ্ক্রিয় কর" -> { "intent": "intent_deactivate_account" }
-- "সেটিংসে যাও" -> { "intent": "intent_open_settings" }
-- "shojib ke khojo" -> { "intent": "intent_search_user", "slots": { "target_name": "shojib" } }
-- "add text Fine" -> { "intent": "intent_add_text_to_story", "slots": { "text": "Fine" } }
+**COMMAND EXAMPLES (English, Bangla, Banglish):**
+
+- **Navigation:**
+  - "go to my profile", "amar profile dekhao" -> {"intent": "intent_open_my_profile"}
+  - "open messages", "message e jao" -> {"intent": "intent_open_messages"}
+  - "show me my friends list", "amar bondhuder dekhao" -> {"intent": "intent_open_friends_page"}
+  - "go back", "pichone jao" -> {"intent": "intent_go_back"}
+
+- **Interaction:**
+  - "like this post" -> {"intent": "intent_react_to_post", "slots": {"reaction_type": "like"}}
+  - "love react dao", "bhalobasha dao" -> {"intent": "intent_react_to_post", "slots": {"reaction_type": "love"}}
+  - "Shojib er post e like dao" -> {"intent": "intent_react_to_post", "slots": {"target_name": "Shojib", "reaction_type": "like"}}
+  - "comment koro 'khub shundor'", "comment 'very nice'" -> {"intent": "intent_comment_on_post", "slots": {"comment_text": "khub shundor"}}
+  - "open comments" -> {"intent": "intent_open_comments"}
+  - "add friend Shojib", "shojib ke bondhu banau" -> {"intent": "intent_add_friend", "slots": {"target_name": "Shojib"}}
+
+- **Creation:**
+  - "create a new voice post" -> {"intent": "intent_create_voice_post"}
+  - "post a photo" -> {"intent": "intent_create_photo_post"}
+  - "create a story with the text 'good morning'" -> {"intent": "intent_create_story_with_text", "slots": {"text_content": "good morning"}}
+  - "make a group called Family", "Family nam e group kholo" -> {"intent": "intent_create_group", "slots": {"group_name": "Family"}}
+
+- **Scrolling:**
+  - "scroll down", "niche jao" -> {"intent": "intent_scroll_down"}
+  - "scroll up", "upore jao" -> {"intent": "intent_scroll_up"}
+  - "stop scrolling" -> {"intent": "intent_stop_scroll"}
+
+- **Search:**
+  - "search for Shojib Khan" -> {"intent": "intent_search_user", "slots": {"target_name": "Shojib Khan"}}
+
+- **Chat:**
+  - "send a message to Shojib", "shojib ke message pathao" -> {"intent": "intent_send_message", "slots": {"target_name": "Shojib"}}
+  - "send 'how are you?' to Shojib" -> {"intent": "intent_send_message", "slots": {"target_name": "Shojib", "message_content": "how are you?"}}
 `;
 
-let NLU_INTENT_LIST = `
-- intent_signup
-- intent_login
-- intent_play_post
-- intent_pause_post
-- intent_next_post
-- intent_previous_post
-- intent_create_post
-- intent_create_voice_post
-- intent_stop_recording
-- intent_post_confirm
-- intent_re_record
-- intent_comment
-- intent_post_comment
-- intent_search_user (extracts 'target_name')
-- intent_select_result (extracts 'index')
-- intent_like (extracts 'target_name')
-- intent_share
-- intent_open_profile (extracts 'target_name')
-- intent_change_avatar
-- intent_help
-- intent_go_back
-- intent_open_settings
-- intent_add_friend (extracts 'target_name')
-- intent_send_message (extracts 'target_name')
-- intent_save_settings
-- intent_update_profile (extracts 'field', 'value')
-- intent_update_privacy (extracts 'setting', 'value')
-- intent_update_notification_setting (extracts 'setting', 'value')
-- intent_block_user (extracts 'target_name')
-- intent_unblock_user (extracts 'target_name')
-- intent_edit_profile
-- intent_record_message
-- intent_send_chat_message
-- intent_view_comments (extracts 'target_name')
-- intent_send_text_message_with_content (extracts 'message_content')
-- intent_open_friend_requests
-- intent_accept_request (extracts 'target_name')
-- intent_decline_request (extracts 'target_name')
-- intent_scroll_up
-- intent_scroll_down
-- intent_stop_scroll
-- intent_open_messages
-- intent_open_friends_page
-- intent_open_chat (extracts 'target_name')
-- intent_change_chat_theme (extracts 'theme_name')
-- intent_delete_chat
-- intent_send_voice_emoji (extracts 'emoji_type')
-- intent_play_comment_by_author (extracts 'target_name')
-- intent_view_comments_by_author (extracts 'target_name')
-- intent_generate_image (extracts 'prompt')
-- intent_clear_image
-- intent_claim_reward
-- intent_open_ads_center
-- intent_create_campaign
-- intent_view_campaign_dashboard
-- intent_set_sponsor_name (extracts 'sponsor_name')
-- intent_set_campaign_caption (extracts 'caption_text')
-- intent_set_campaign_budget (extracts 'budget_amount')
-- intent_set_media_type (extracts 'media_type')
-- intent_launch_campaign
-- intent_change_password
-- intent_deactivate_account
-- intent_open_feed
-- intent_open_explore
-- intent_open_rooms_hub
-- intent_open_audio_rooms
-- intent_open_video_rooms
-- intent_create_room
-- intent_close_room
-- intent_reload_page
-- intent_open_groups_hub
-- intent_join_group (extracts 'group_name')
-- intent_leave_group (extracts 'group_name')
-- intent_create_group (extracts 'group_name')
-- intent_search_group (extracts 'search_query')
-- intent_filter_groups_by_category (extracts 'category_name')
-- intent_invite_to_group (extracts 'target_name')
-- intent_view_group_suggestions
-- intent_pin_post
-- intent_unpin_post
-- intent_open_group_chat
-- intent_open_group_events
-- intent_create_event
-- intent_create_poll
-- intent_vote_poll (extracts 'option_number' or 'option_text')
-- intent_view_group_by_name (extracts 'group_name')
-- intent_manage_group
-- intent_open_group_invite_page
-- intent_create_story
-- intent_add_music
-- intent_post_story
-- intent_set_story_privacy (extracts 'privacy_level')
-- intent_add_text_to_story (extracts 'text')
-- intent_react_to_message (extracts 'emoji_type')
-- intent_reply_to_message
-- intent_reply_to_last_message (extracts 'message_content')
-- intent_react_to_last_message (extracts 'emoji_type')
-- intent_unsend_message
-- intent_send_announcement (extracts 'message_content')
-- intent_unfriend_user (extracts 'target_name')
-- intent_cancel_friend_request (extracts 'target_name')
+const NLU_INTENT_LIST = `
+- **Navigation Intents:**
+  - intent_open_feed
+  - intent_open_explore
+  - intent_open_reels
+  - intent_open_friends_page
+  - intent_open_messages
+  - intent_open_rooms_hub
+  - intent_open_audio_rooms
+  - intent_open_video_rooms
+  - intent_open_groups_hub
+  - intent_open_settings
+  - intent_open_ads_center
+  - intent_open_my_profile
+  - intent_open_profile (extracts 'target_name')
+  - intent_go_back
+  - intent_reload_page
+
+- **Creation Intents:**
+  - intent_create_post
+  - intent_create_voice_post
+  - intent_create_photo_post
+  - intent_create_video_post
+  - intent_create_text_post (extracts 'caption')
+  - intent_create_story
+  - intent_create_story_with_text (extracts 'text_content')
+  - intent_create_group (extracts 'group_name')
+  - intent_create_room (extracts 'room_name')
+  - intent_create_poll (extracts 'question')
+  - intent_generate_image (extracts 'prompt')
+
+- **Interaction Intents:**
+  - intent_react_to_post (extracts 'reaction_type', 'target_name')
+  - intent_comment_on_post (extracts 'comment_text', 'target_name')
+  - intent_open_comments (extracts 'target_name')
+  - intent_share_post (extracts 'target_name')
+  - intent_delete_post (extracts 'target_name')
+  - intent_save_post (extracts 'target_name')
+  - intent_hide_post (extracts 'target_name')
+  - intent_report_post (extracts 'target_name')
+  - intent_play_post
+  - intent_pause_post
+  - intent_next_post
+  - intent_previous_post
+  - intent_stop_recording
+  - intent_re_record
+  - intent_post_confirm
+
+- **Social/Friendship Intents:**
+  - intent_add_friend (extracts 'target_name')
+  - intent_unfriend_user (extracts 'target_name')
+  - intent_accept_request (extracts 'target_name')
+  - intent_decline_request (extracts 'target_name')
+  - intent_cancel_friend_request (extracts 'target_name')
+  - intent_block_user (extracts 'target_name')
+
+- **Search Intents:**
+  - intent_search_user (extracts 'target_name')
+  - intent_search_group (extracts 'search_query')
+  - intent_select_result (extracts 'index')
+
+- **UI/Control Intents:**
+  - intent_scroll_down
+  - intent_scroll_up
+  - intent_stop_scroll
+
+- **Chat Intents:**
+  - intent_send_message (extracts 'target_name', 'message_content')
+  - intent_send_voice_emoji (extracts 'emoji_type')
+  - intent_change_chat_theme (extracts 'theme_name')
+
+- **Miscellaneous Intents:**
+  - intent_help
+  - unknown
 `;
+
 
 // Define a schema for the Post object to be returned by Gemini
 const postSchemaProperties = {
@@ -168,7 +168,7 @@ export const geminiService = {
     
     let dynamicContext = "";
     if (context?.userNames && context.userNames.length > 0) {
-        dynamicContext += `\nFor intents that require a 'target_name' (like open_profile, send_message, add_friend, like, block_user, etc.), the user might say one of these names: [${context.userNames.join(', ')}]. Extract the name exactly as it appears in this list if you find a match.`;
+        dynamicContext += `\nFor intents that require a 'target_name' (like open_profile, send_message, add_friend, react_to_post, block_user, etc.), the user might say one of these names: [${context.userNames.join(', ')}]. Extract the name exactly as it appears in this list if you find a match.`;
     }
      if (context?.groupNames && context.groupNames.length > 0) {
         dynamicContext += `\nFor intents related to groups (like join_group, leave_group, etc.), here are some available groups: [${context.groupNames.join(', ')}].`;
@@ -212,6 +212,12 @@ export const geminiService = {
                     option_text: { type: Type.STRING },
                     privacy_level: { type: Type.STRING },
                     text: { type: Type.STRING },
+                    reaction_type: { type: Type.STRING },
+                    comment_text: { type: Type.STRING },
+                    caption: { type: Type.STRING },
+                    text_content: { type: Type.STRING },
+                    room_name: { type: Type.STRING },
+                    question: { type: Type.STRING },
                 },
               }
             },

@@ -25,6 +25,7 @@ export const getTtsPrompt = (key: string, lang: Language, options?: { [key: stri
 export const VOICE_EMOJI_MAP: Record<string, string> = {
     laughing: '😂',
     hashi: '😂',
+    haha: '😂',
     heart: '❤️',
     love: '❤️',
     bhalobasha: '❤️',
@@ -40,6 +41,7 @@ export const VOICE_EMOJI_MAP: Record<string, string> = {
     agun: '🔥',
     wow: '😮',
     surprised: '😮',
+    obak: '😮',
     smile: '😊',
     happy: '😊',
     inlove: '😍',
