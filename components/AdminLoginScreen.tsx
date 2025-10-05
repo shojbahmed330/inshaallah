@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AdminUser } from '../types';
 import Icon from './Icon';
-import { geminiService } from '../services/geminiService';
+import { firebaseService } from '../services/firebaseService';
 
 interface AdminLoginScreenProps {
   onLoginSuccess: (user: AdminUser) => void;
@@ -19,12 +19,10 @@ const AdminLoginScreen: React.FC<AdminLoginScreenProps> = ({ onLoginSuccess }) =
     setIsLoading(true);
 
     try {
-      const user = await geminiService.adminLogin(email, password);
-      if (user) {
-        onLoginSuccess(user);
-      } else {
-        setError('Invalid credentials. Please try again.');
-      }
+      const user = await firebaseService.adminLogin(email, password);
+      // The new adminLogin handles full authentication and authorization.
+      // If it returns a user, login is successful.
+      onLoginSuccess(user);
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {

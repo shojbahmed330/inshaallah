@@ -2284,27 +2284,32 @@ export const firebaseService = {
     getGroupEvents: async (groupId) => [],
     createGroupEvent: async (creator, groupId, title, description, date) => null,
     rsvpToEvent: async (userId, eventId) => true,
-    adminLogin: async (email, password) => {
+    adminLogin: async (email: string, password: string): Promise<AdminUser> => {
         try {
-            const adminsRef = collection(db, 'admins');
-            const q = query(adminsRef, where("email", "==", email.toLowerCase()));
-            const querySnapshot = await getDocs(q);
+            // 1. Authenticate with Firebase Auth
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
 
-            if (querySnapshot.empty) {
-                throw new Error("Invalid credentials or insufficient permissions.");
+            // 2. Authorize: Check if user is in the 'admins' collection
+            const adminDocRef = doc(db, 'admins', user.uid);
+            const adminDoc = await getDoc(adminDocRef);
+
+            if (adminDoc.exists()) {
+                // 3. Success: User is an admin
+                return { id: user.uid, email: user.email! };
+            } else {
+                // 4. Failure: User is authenticated but not an admin. Sign them out.
+                await signOut(auth);
+                throw new Error("You do not have permission to access the admin panel.");
             }
-
-            const adminDoc = querySnapshot.docs[0];
-            const adminData = adminDoc.data();
-
-            if (adminData.password === password) {
-                return { id: adminDoc.id, email: adminData.email };
-            }
-
-            throw new Error("Invalid credentials or insufficient permissions.");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Admin login error:", error);
-            throw error; // Re-throw to be caught by the UI
+            // Handle specific Firebase Auth errors
+            if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                throw new Error("Invalid email or password.");
+            }
+            // Re-throw other errors (like the permission error from step 4)
+            throw error;
         }
     },
     getAdminDashboardStats: async () => ({ totalUsers: 0, newUsersToday: 0, postsLast24h: 0, pendingCampaigns: 0, activeUsersNow: 0, pendingReports: 0, pendingPayments: 0 }),

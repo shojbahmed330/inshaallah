@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { AdminUser } from '../types';
 import AdminDashboard from './AdminDashboard';
 import AdminLoginScreen from './AdminLoginScreen';
+import { auth } from '../services/firebaseConfig';
+import { signOut } from 'firebase/auth';
 
 const AdminPortal: React.FC = () => {
     const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
@@ -11,8 +13,14 @@ const AdminPortal: React.FC = () => {
         setAdminUser(user);
     };
 
-    const handleLogout = () => {
-        setAdminUser(null);
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error("Error signing out admin:", error);
+        } finally {
+            setAdminUser(null);
+        }
     };
 
     if (!adminUser) {

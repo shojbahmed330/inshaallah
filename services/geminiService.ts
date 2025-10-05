@@ -323,7 +323,6 @@ export const geminiService = {
         };
 
         const response = await ai.models.generateContent({
-            // FIX: Invalid model name, using the correct model for image editing.
             model: 'gemini-2.5-flash-image',
             contents: { parts: [imagePart, textPart] },
             config: {

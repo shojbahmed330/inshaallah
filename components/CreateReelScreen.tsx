@@ -52,7 +52,6 @@ const CreateReelScreen: React.FC<CreateReelScreenProps> = ({ currentUser, onGoBa
         onSetTtsMessage("Publishing your Reel...");
         
         try {
-            // @FIX: 'mediaFile' does not exist. It should be 'mediaFiles' and expect an array.
             await firebaseService.createPost(
                 { author: currentUser, caption, captionStyle, duration: 0 },
                 { mediaFiles: videoFile ? [videoFile] : [] }

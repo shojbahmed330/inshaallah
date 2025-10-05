@@ -31,7 +31,8 @@ import LiveVideoRoomScreen from './components/LiveVideoRoomScreen';
 import GroupsHubScreen from './components/GroupsHubScreen';
 import GroupPageScreen from './components/GroupPageScreen';
 import ManageGroupScreen from './components/ManageGroupScreen';
-import GroupChatScreen from './components/GroupChatScreen';
+// FIX: Changed to named import to resolve module error.
+import { GroupChatScreen } from './components/GroupChatScreen';
 import GroupEventsScreen from './components/GroupEventsScreen';
 import CreateEventScreen from './components/CreateEventScreen';
 import CreateStoryScreen from './components/CreateStoryScreen';
