@@ -901,6 +901,32 @@ export const firebaseService = {
             return false;
         }
     },
+
+    async savePost(userId: string, postId: string): Promise<boolean> {
+        const userRef = doc(db, 'users', userId);
+        try {
+            await updateDoc(userRef, {
+                savedPostIds: arrayUnion(postId)
+            });
+            return true;
+        } catch (error) {
+            console.error("Error saving post:", error);
+            return false;
+        }
+    },
+
+    async unsavePost(userId: string, postId: string): Promise<boolean> {
+        const userRef = doc(db, 'users', userId);
+        try {
+            await updateDoc(userRef, {
+                savedPostIds: arrayRemove(postId)
+            });
+            return true;
+        } catch (error) {
+            console.error("Error unsaving post:", error);
+            return false;
+        }
+    },
     
     async reactToPost(postId: string, userId: string, newReaction: string): Promise<boolean> {
         const postRef = doc(db, 'posts', postId);

@@ -347,6 +347,18 @@ const UserApp: React.FC = () => {
             : await geminiService.unsavePost(user.id, post.id);
         
         if (success) {
+            // Update the user state optimistically
+            setUser(prevUser => {
+                if (!prevUser) return null;
+                const currentSavedIds = new Set(prevUser.savedPostIds || []);
+                if (isSaving) {
+                    currentSavedIds.add(post.id);
+                } else {
+                    currentSavedIds.delete(post.id);
+                }
+                return { ...prevUser, savedPostIds: Array.from(currentSavedIds) };
+            });
+
             setTtsMessage(isSaving ? "Post saved." : "Post unsaved.");
         } else {
             setTtsMessage("Could not save post. Please try again.");
