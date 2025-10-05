@@ -268,8 +268,8 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-      // FIX: Use spread operator to correctly infer string[] type from Set<string>.
-      await updateProfileLists({ pinnedChatIds: [...newPinnedIds] });
+      // FIX: Use Array.from to correctly infer string[] type from Set<string>.
+      await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) });
   };
 
   const handleArchiveToggle = async (peerId: string, withUndo: boolean = false) => {
@@ -299,8 +299,8 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-      // FIX: Use spread operator to correctly infer string[] type from Set<string>.
-      updateProfileLists({ archivedChatIds: [...newArchivedIds], pinnedChatIds: [...newPinnedIds] });
+      // FIX: Use Array.from to correctly infer string[] type from Set<string>.
+      updateProfileLists({ archivedChatIds: Array.from(newArchivedIds), pinnedChatIds: Array.from(newPinnedIds) });
   };
   
   const handleDeleteChat = (peerId: string) => {

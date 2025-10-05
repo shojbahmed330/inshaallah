@@ -438,6 +438,13 @@ export const geminiService = {
     getCampaignsForSponsor: (sponsorId: string) => firebaseService.getCampaignsForSponsor(sponsorId),
     submitCampaignForApproval: (campaignData: Omit<Campaign, 'id'|'views'|'clicks'|'status'|'transactionId'>, transactionId: string) => firebaseService.submitCampaignForApproval(campaignData, transactionId),
     getRandomActiveCampaign: () => firebaseService.getRandomActiveCampaign(),
+    // @FIX: Add missing passthroughs for ads/leads
+    trackAdView: (campaignId: string) => firebaseService.trackAdView(campaignId),
+    trackAdClick: (campaignId: string) => firebaseService.trackAdClick(campaignId),
+    submitLead: (leadData: Omit<Lead, 'id'>) => firebaseService.submitLead(leadData),
+    getLeadsForCampaign: (campaignId: string) => firebaseService.getLeadsForCampaign(campaignId),
+    getInjectableAd: (currentUser: User) => firebaseService.getInjectableAd(currentUser),
+    getInjectableStoryAd: (currentUser: User) => firebaseService.getInjectableStoryAd(currentUser),
 
     // --- Stories ---
     getStories: (currentUserId: string) => firebaseService.getStories(currentUserId),
