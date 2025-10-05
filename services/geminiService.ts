@@ -152,7 +152,15 @@ const postSchemaProperties = {
         },
         caption: { type: Type.STRING },
         createdAt: { type: Type.STRING },
-        reactions: { type: Type.OBJECT }, // Simplified for the model
+        reactions: {
+            type: Type.OBJECT,
+            properties: {
+                "placeholder_user_id": {
+                    type: Type.STRING,
+                    description: "This field is a placeholder. The actual object contains user IDs as keys and their emoji reactions as string values."
+                }
+            }
+        },
         commentCount: { type: Type.NUMBER },
         imageUrl: { type: Type.STRING },
         videoUrl: { type: Type.STRING },
