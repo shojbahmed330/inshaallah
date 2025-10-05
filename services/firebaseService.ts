@@ -519,7 +519,7 @@ export const firebaseService = {
         try {
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friendIds: arrayRemove(targetUserId) });
-            batch.update(targetUserRef, { friendIds: arrayRemove(targetUserId) });
+            batch.update(targetUserRef, { friendIds: arrayRemove(currentUserId) });
             await batch.commit();
             return true;
         } catch (error) {
@@ -1908,14 +1908,36 @@ export const firebaseService = {
         return postDoc.exists() ? docToPost(postDoc) : null;
     },
     async getPendingReports(): Promise<Report[]> {
-        const reportsRef = collection(db, 'reports');
-        const q = query(reportsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
-        } as Report));
+        try {
+            const reportsRef = collection(db, 'reports');
+            // This query requires a composite index on ('status', 'createdAt' desc). If it fails, the catch block will run.
+            const q = query(reportsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
+            } as Report));
+        } catch (error) {
+            console.error("Error fetching pending reports (likely a missing index):", error);
+            // Fallback query without ordering to avoid index-related crashes.
+            try {
+                const reportsRef = collection(db, 'reports');
+                const q = query(reportsRef, where('status', '==', 'pending'));
+                const snapshot = await getDocs(q);
+                const reports = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
+                } as Report));
+                // Manually sort by date descending
+                reports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                return reports;
+            } catch (fallbackError) {
+                console.error("Fallback query for pending reports also failed:", fallbackError);
+                return []; // Return empty array to unblock UI.
+            }
+        }
     },
     async resolveReport(reportId: string, resolution: string): Promise<void> {
         const reportRef = doc(db, 'reports', reportId);
@@ -2017,27 +2039,47 @@ export const firebaseService = {
         const postsQuery = query(collection(db, 'posts'), where('author.id', '==', userId), orderBy('createdAt', 'desc'), limit(20));
         const reportsQuery = query(collection(db, 'reports'), where('reportedUserId', '==', userId), orderBy('createdAt', 'desc'), limit(20));
         
-        // This is inefficient but necessary for this feature without schema changes
-        const allPostsQuery = getDocs(collection(db, 'posts'));
+        // PERFORMANCE FIX: Limit the comment search to the 200 most recent posts to avoid fetching the entire collection.
+        const allPostsForCommentsQuery = getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(200)));
 
-        const [postsSnap, reportsSnap, allPostsSnap] = await Promise.all([getDocs(postsQuery), getDocs(reportsQuery), allPostsQuery]);
-        
-        const posts = postsSnap.docs.map(docToPost);
-        const reports = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
-        
-        const comments: CommentType[] = [];
-        allPostsSnap.forEach(postDoc => {
-            const postData = postDoc.data();
-            if (postData.comments && Array.isArray(postData.comments)) {
-                postData.comments.forEach((comment: any) => {
-                    if (comment.author && comment.author.id === userId) {
-                        comments.push({ ...comment, postId: postDoc.id });
-                    }
-                });
-            }
-        });
+        try {
+            const [postsSnap, reportsSnap, allPostsSnap] = await Promise.all([getDocs(postsQuery), getDocs(reportsQuery), allPostsForCommentsQuery]);
+            
+            const posts = postsSnap.docs.map(docToPost);
+            const reports = reportsSnap.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                // BUG FIX: Ensure createdAt is converted from Timestamp
+                createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
+            } as Report));
+            
+            // TYPE FIX: `CommentType` is not defined; use `Comment` from types.ts.
+            const comments: (Comment & { postId: string })[] = [];
+            allPostsSnap.forEach(postDoc => {
+                const postData = postDoc.data();
+                if (postData.comments && Array.isArray(postData.comments)) {
+                    postData.comments.forEach((comment: any) => {
+                        if (comment.author && comment.author.id === userId) {
+                            comments.push({ 
+                                ...comment, 
+                                postId: postDoc.id,
+                                // BUG FIX: Ensure createdAt is converted from Timestamp
+                                createdAt: comment.createdAt instanceof Timestamp ? comment.createdAt.toDate().toISOString() : comment.createdAt,
+                            });
+                        }
+                    });
+                }
+            });
+            
+            // Sort comments by date since they are collected from various posts
+            comments.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-        return { user, posts, comments, reports };
+            return { user, posts, comments, reports };
+        } catch (error) {
+            console.error("Error fetching user details for admin:", error);
+            // Return partial data or null to unblock the UI from an infinite loading state.
+            return { user, posts: [], comments: [], reports: [] };
+        }
     },
     sendSiteWideAnnouncement: async (message) => true,
     getAllCampaignsForAdmin: async () => [],
