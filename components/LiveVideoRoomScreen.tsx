@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { LiveVideoRoom, User, VideoParticipantState, LiveVideoRoomMessage } from '../types';
+import { AppView, LiveVideoRoom, User, VideoParticipantState, LiveVideoRoomMessage } from '../types';
 import { geminiService } from '../services/geminiService';
 import Icon from './Icon';
 import { AGORA_APP_ID } from '../constants';
@@ -107,9 +107,10 @@ interface LiveVideoRoomScreenProps {
     roomId: string;
     onGoBack: () => void;
     onSetTtsMessage: (message: string) => void;
+    onNavigate: (view: AppView, props?: any) => void;
 }
 
-const LiveVideoRoomScreen: React.FC<LiveVideoRoomScreenProps> = ({ currentUser, roomId, onGoBack, onSetTtsMessage }) => {
+const LiveVideoRoomScreen: React.FC<LiveVideoRoomScreenProps> = ({ currentUser, roomId, onGoBack, onSetTtsMessage, onNavigate }) => {
     const [room, setRoom] = useState<LiveVideoRoom | null>(null);
     const [messages, setMessages] = useState<LiveVideoRoomMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
@@ -228,10 +229,17 @@ const LiveVideoRoomScreen: React.FC<LiveVideoRoomScreenProps> = ({ currentUser, 
     }, [roomId, currentUser.id, onGoBack]);
     
     useEffect(() => {
-        const unsubRoom = geminiService.listenToVideoRoom(roomId, liveRoom => liveRoom ? setRoom(liveRoom) : onGoBack());
+        const unsubRoom = geminiService.listenToVideoRoom(roomId, liveRoom => {
+            if (liveRoom && liveRoom.status === 'live') {
+                setRoom(liveRoom);
+            } else {
+                onSetTtsMessage("The video room has ended. Returning to audio rooms list.");
+                onNavigate(AppView.ROOMS_LIST);
+            }
+        });
         const unsubMessages = geminiService.listenToLiveVideoRoomMessages(roomId, setMessages);
         return () => { unsubRoom(); unsubMessages(); };
-    }, [roomId, onGoBack]);
+    }, [roomId, onGoBack, onNavigate, onSetTtsMessage]);
 
     // Controls visibility timeout
     useEffect(() => {
