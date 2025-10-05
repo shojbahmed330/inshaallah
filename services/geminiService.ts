@@ -554,6 +554,11 @@ export const geminiService = {
             return { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
         }
 
+        // Create a map for easy lookup after getting the categorized response
+        const postsById = new Map(posts.map(p => [p.id, p]));
+        // Create lightweight posts without the 'comments' array to reduce prompt size
+        const lightweightPosts = posts.map(({ comments, ...rest }) => rest);
+
         const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. 
         
         CRITICAL INSTRUCTIONS FOR 'forYou' CATEGORY:
@@ -570,7 +575,7 @@ export const geminiService = {
         try {
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: `Here are the posts to categorize: ${JSON.stringify(posts)}`,
+                contents: `Here are the posts to categorize: ${JSON.stringify(lightweightPosts)}`,
                 config: {
                     systemInstruction,
                     responseMimeType: "application/json",
@@ -589,8 +594,19 @@ export const geminiService = {
             });
 
             const jsonString = response.text.trim();
-            const categorizedFeed = JSON.parse(jsonString);
-            return categorizedFeed;
+            const categorizedLightweightFeed = JSON.parse(jsonString);
+
+            // Rehydrate the feed with the full post objects using the map
+            const rehydratedFeed: CategorizedExploreFeed = { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
+            for (const category of Object.keys(rehydratedFeed)) {
+                if (categorizedLightweightFeed[category]) {
+                    rehydratedFeed[category] = categorizedLightweightFeed[category]
+                        .map((lightPost: Post) => postsById.get(lightPost.id))
+                        .filter((p: Post | undefined): p is Post => !!p);
+                }
+            }
+            return rehydratedFeed;
+            
         } catch (error) {
             console.error("Failed to parse categorized feed from Gemini:", error);
             // Fallback to a simple categorization if Gemini fails
