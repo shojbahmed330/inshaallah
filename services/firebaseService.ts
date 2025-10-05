@@ -2456,4 +2456,92 @@ export const firebaseService = {
             ctaLink: campaign.websiteUrl,
         };
     },
+    // Rooms
+    async createLiveAudioRoom(host: User, topic: string): Promise<LiveAudioRoom | null> {
+        const hostAuthor: Author = { id: host.id, name: host.name, username: host.username, avatarUrl: host.avatarUrl };
+        const newRoom: Omit<LiveAudioRoom, 'id'> = {
+            host: hostAuthor,
+            topic,
+            speakers: [hostAuthor],
+            listeners: [],
+            raisedHands: [],
+            createdAt: new Date().toISOString(),
+            status: 'live',
+        };
+        const docRef = await addDoc(collection(db, 'liveAudioRooms'), { ...newRoom, createdAt: serverTimestamp() });
+        const newDoc = await getDoc(docRef);
+        return { id: newDoc.id, ...newDoc.data() } as LiveAudioRoom;
+    },
+    async createLiveVideoRoom(host: User, topic: string): Promise<LiveVideoRoom | null> {
+        const hostAuthor: Author = { id: host.id, name: host.name, username: host.username, avatarUrl: host.avatarUrl };
+        const newRoom: Omit<LiveVideoRoom, 'id'> = {
+            host: hostAuthor,
+            topic,
+            participants: [{
+                id: host.id,
+                name: host.name,
+                username: host.username,
+                avatarUrl: host.avatarUrl,
+                isMuted: false,
+                isCameraOff: false,
+            }],
+            createdAt: new Date().toISOString(),
+            status: 'live',
+        };
+        const docRef = await addDoc(collection(db, 'liveVideoRooms'), { ...newRoom, createdAt: serverTimestamp() });
+        const newDoc = await getDoc(docRef);
+        return { id: newDoc.id, ...newDoc.data() } as LiveVideoRoom;
+    },
+    async joinLiveAudioRoom(userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const user = await this.getUserProfileById(userId);
+        if (!user) return;
+    
+        const userAuthor: Author = {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatarUrl: user.avatarUrl,
+        };
+    
+        const roomDoc = await getDoc(roomRef);
+        if (roomDoc.exists()) {
+            const roomData = roomDoc.data() as LiveAudioRoom;
+            const isSpeaker = roomData.speakers.some(s => s.id === userId);
+            const isListener = roomData.listeners.some(l => l.id === userId);
+    
+            if (!isSpeaker && !isListener) {
+                await updateDoc(roomRef, {
+                    listeners: arrayUnion(userAuthor),
+                });
+            }
+        }
+    },
+
+    async joinLiveVideoRoom(userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveVideoRooms', roomId);
+        const user = await this.getUserProfileById(userId);
+        if (!user) return;
+    
+        const newParticipant: VideoParticipantState = {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatarUrl: user.avatarUrl,
+            isMuted: false, // Default state
+            isCameraOff: false, // Default state
+        };
+        
+        const roomDoc = await getDoc(roomRef);
+        if (roomDoc.exists()) {
+            const roomData = roomDoc.data() as LiveVideoRoom;
+            const isAlreadyParticipant = roomData.participants.some(p => p.id === userId);
+    
+            if (!isAlreadyParticipant) {
+                await updateDoc(roomRef, {
+                    participants: arrayUnion(newParticipant),
+                });
+            }
+        }
+    },
 };
