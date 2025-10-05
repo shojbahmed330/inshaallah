@@ -9,7 +9,7 @@ export enum AppView {
 }
 
 export enum VoiceState {
-  IDLE, LISTENING, PROCESSING
+  IDLE, PASSIVE_LISTENING, ACTIVE_LISTENING, PROCESSING
 }
 
 export enum ScrollState {

@@ -49,10 +49,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
       return `${base} bg-slate-500 cursor-not-allowed`;
     }
     switch (voiceState) {
-        case VoiceState.LISTENING:
+        // FIX: Replaced VoiceState.LISTENING with ACTIVE_LISTENING and added PASSIVE_LISTENING with updated styles for consistency.
+        case VoiceState.ACTIVE_LISTENING:
             return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
         case VoiceState.PROCESSING:
             return `${base} bg-yellow-600 cursor-not-allowed`;
+        case VoiceState.PASSIVE_LISTENING:
+            return `${base} bg-fuchsia-600 hover:bg-fuchsia-500 animate-slow-pulse`;
         default: // IDLE
             return `${base} bg-fuchsia-600 hover:bg-fuchsia-500`;
     }
@@ -62,7 +65,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
     switch (voiceState) {
         case VoiceState.PROCESSING:
             return <Icon name="logo" className="w-6 h-6 animate-spin" />;
-        case VoiceState.LISTENING:
+        // FIX: Replaced VoiceState.LISTENING with ACTIVE_LISTENING and added PASSIVE_LISTENING.
+        case VoiceState.ACTIVE_LISTENING:
+        case VoiceState.PASSIVE_LISTENING:
         default:
             return <Icon name="mic" className="w-6 h-6" />;
     }
@@ -75,8 +80,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
     switch (voiceState) {
         case VoiceState.PROCESSING:
             return "Processing...";
-        case VoiceState.LISTENING:
+        // FIX: Replaced VoiceState.LISTENING with ACTIVE_LISTENING and added PASSIVE_LISTENING with specific text for better user feedback.
+        case VoiceState.ACTIVE_LISTENING:
             return "Listening...";
+        case VoiceState.PASSIVE_LISTENING:
+            return "Say 'Hey VoiceBook'";
         default:
             return "Voice Command";
     }

@@ -164,7 +164,7 @@ const UserApp: React.FC = () => {
   const [campaignForAd, setCampaignForAd] = useState<Campaign | null>(null);
   const [viewingAd, setViewingAd] = useState<Post | null>(null);
   const [voiceState, setVoiceState] = useState<VoiceState>(VoiceState.IDLE);
-  const [ttsMessage, setTtsMessage] = useState<string>('Say a command...');
+  const [ttsMessage, setTtsMessage] = useState<string>("Say 'Hey VoiceBook' or click the mic.");
   const [lastCommand, setLastCommand] = useState<string | null>(null);
   const [scrollState, setScrollState] = useState<ScrollState>(ScrollState.NONE);
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
@@ -201,7 +201,9 @@ const UserApp: React.FC = () => {
 
   const notificationPanelRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null); // To hold the active speech recognition instance
+  const recognitionRef = useRef<any>(null); 
+  const passiveRecognitionRef = useRef<any>(null);
+  const stopPassiveListenerRef = useRef<boolean>(false);
   const viewerPostUnsubscribe = useRef<(() => void) | null>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const currentView = viewStack[viewStack.length - 1];
@@ -588,13 +590,18 @@ const UserApp: React.FC = () => {
       return;
     }
 
+    if (passiveRecognitionRef.current) {
+        stopPassiveListenerRef.current = true;
+        passiveRecognitionRef.current.stop();
+    }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setTtsMessage(getTtsPrompt('error_no_speech_rec', language));
       return;
     }
 
-    if (voiceState === VoiceState.LISTENING) {
+    if (voiceState === VoiceState.ACTIVE_LISTENING) {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
@@ -614,19 +621,17 @@ const UserApp: React.FC = () => {
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
-      setVoiceState(VoiceState.LISTENING);
+      setVoiceState(VoiceState.ACTIVE_LISTENING);
       setCommandInputValue(''); 
       setTtsMessage("Listening...");
     };
 
     recognition.onend = () => {
       recognitionRef.current = null;
-      setVoiceState(currentVoiceState => {
-        if (currentVoiceState === VoiceState.LISTENING) { 
-            return VoiceState.IDLE;
-        }
-        return currentVoiceState;
-      });
+      if (voiceState === VoiceState.ACTIVE_LISTENING) {
+        setVoiceState(VoiceState.IDLE);
+      }
+      stopPassiveListenerRef.current = false;
     };
 
     recognition.onerror = (event: any) => {
@@ -645,6 +650,77 @@ const UserApp: React.FC = () => {
 
     recognition.start();
   }, [voiceState, handleCommand, language, isChatRecording]);
+  
+  // Effect for wake word listening
+  useEffect(() => {
+    if (!user || isChatRecording) {
+        if (passiveRecognitionRef.current) {
+            stopPassiveListenerRef.current = true;
+            passiveRecognitionRef.current.stop();
+        }
+        return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const startPassiveListener = () => {
+        if (stopPassiveListenerRef.current || recognitionRef.current || passiveRecognitionRef.current) return;
+
+        const recognition = new SpeechRecognition();
+        passiveRecognitionRef.current = recognition;
+        recognition.lang = 'en-US, bn-BD';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        recognition.onstart = () => {
+            if (!stopPassiveListenerRef.current) {
+                setVoiceState(VoiceState.PASSIVE_LISTENING);
+                setTtsMessage("Say 'Hey VoiceBook'...");
+            }
+        };
+
+        recognition.onresult = (event: any) => {
+            const transcript = Array.from(event.results).map((result: any) => result[0].transcript).join('');
+            if (transcript.toLowerCase().includes('hey voicebook') || transcript.toLowerCase().includes('voicebook')) {
+                stopPassiveListenerRef.current = true;
+                recognition.stop();
+                handleMicClick();
+            }
+        };
+
+        recognition.onerror = (e: any) => {
+            console.error('Passive listener error', e.error);
+             if (e.error !== 'no-speech') {
+                stopPassiveListenerRef.current = true;
+            }
+        };
+
+        recognition.onend = () => {
+            passiveRecognitionRef.current = null;
+            if (!stopPassiveListenerRef.current) {
+                setTimeout(startPassiveListener, 250);
+            }
+        };
+
+        recognition.start();
+    };
+
+    startPassiveListener();
+
+    return () => {
+        stopPassiveListenerRef.current = true;
+        if (passiveRecognitionRef.current) {
+            passiveRecognitionRef.current.stop();
+            passiveRecognitionRef.current = null;
+        }
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+    };
+}, [user, isChatRecording, handleMicClick]);
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

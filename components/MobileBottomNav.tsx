@@ -82,7 +82,11 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
 
     const handleFabClick = () => {
         if (hasMovedRef.current) return;
-        setIsCommandOpen(true);
+        if (voiceState === VoiceState.PASSIVE_LISTENING || voiceState === VoiceState.IDLE) {
+            onMicClick(); // Manually trigger active listening
+        } else {
+            setIsCommandOpen(true);
+        }
     };
 
     const getFabClass = () => {
@@ -91,10 +95,12 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
           return `${base} bg-slate-500 cursor-not-allowed`;
         }
         switch (voiceState) {
-            case VoiceState.LISTENING:
+            case VoiceState.ACTIVE_LISTENING:
                 return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
             case VoiceState.PROCESSING:
                 return `${base} bg-yellow-600 cursor-not-allowed`;
+            case VoiceState.PASSIVE_LISTENING:
+                 return `${base} bg-gradient-to-br from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 animate-slow-pulse`;
             default: // IDLE
                 return `${base} bg-gradient-to-br from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500`;
         }
