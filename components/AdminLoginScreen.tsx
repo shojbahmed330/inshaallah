@@ -14,13 +14,36 @@ const AdminLoginScreen: React.FC<AdminLoginScreenProps> = ({ onLoginSuccess }) =
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // Added
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleModeChange = (newMode: AuthMode) => {
+      setMode(newMode);
+      setError('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
+    // Registration validation
+    if (mode === 'register') {
+        if (password.length < 6) {
+            setError('Password must be at least 6 characters long.');
+            setIsLoading(false);
+            return;
+        }
+        if (password !== confirmPassword) {
+            setError('Passwords do not match.');
+            setIsLoading(false);
+            return;
+        }
+    }
 
     try {
       let user: AdminUser | null = null;
@@ -29,7 +52,7 @@ const AdminLoginScreen: React.FC<AdminLoginScreenProps> = ({ onLoginSuccess }) =
         if (!user) {
           setError('Invalid credentials. Please try again.');
         }
-      } else {
+      } else { // register mode
         user = await geminiService.adminRegister(email, password);
         if (!user) {
           setError('An admin with this email already exists.');
@@ -62,13 +85,13 @@ const AdminLoginScreen: React.FC<AdminLoginScreenProps> = ({ onLoginSuccess }) =
         <div className="bg-slate-800/50 p-8 rounded-lg border border-slate-700">
           <div className="flex border-b border-slate-700 mb-6">
             <button
-              onClick={() => { setMode('login'); setError(''); }}
+              onClick={() => handleModeChange('login')}
               className={`w-1/2 py-3 font-semibold text-lg transition-colors ${mode === 'login' ? 'text-sky-400 border-b-2 border-sky-400' : 'text-slate-400 hover:text-white'}`}
             >
               Login
             </button>
             <button
-              onClick={() => { setMode('register'); setError(''); }}
+              onClick={() => handleModeChange('register')}
               className={`w-1/2 py-3 font-semibold text-lg transition-colors ${mode === 'register' ? 'text-sky-400 border-b-2 border-sky-400' : 'text-slate-400 hover:text-white'}`}
             >
               Register
@@ -98,6 +121,20 @@ const AdminLoginScreen: React.FC<AdminLoginScreenProps> = ({ onLoginSuccess }) =
                 className="bg-slate-700 border border-slate-600 text-slate-100 text-base rounded-lg focus:ring-sky-500 focus:border-sky-500 block w-full p-2.5 transition"
               />
             </div>
+            
+            {mode === 'register' && (
+              <div>
+                <label htmlFor="confirmPassword" className="block mb-2 text-sm font-medium text-slate-300">Confirm Password</label>
+                <input
+                  type="password"
+                  id="confirmPassword"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  className="bg-slate-700 border border-slate-600 text-slate-100 text-base rounded-lg focus:ring-sky-500 focus:border-sky-500 block w-full p-2.5 transition"
+                />
+              </div>
+            )}
 
             {error && <p className="text-sm text-red-400">{error}</p>}
 
