@@ -25,6 +25,9 @@ interface ExploreScreenProps {
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   onDeletePost: (postId: string) => void;
   onReportPost: (post: Post) => void;
+  onHidePost: (postId: string) => void;
+  onSavePost: (post: Post, isSaving: boolean) => void;
+  onCopyLink: (post: Post) => void;
 }
 
 const SkeletonCarousel: React.FC<{ title: string }> = ({ title }) => (
@@ -79,7 +82,7 @@ const TrendingSection: React.FC<{
             <div className="flex flex-col lg:flex-row gap-6">
                 {/* Main Post */}
                 <div className="lg:w-[60%] flex-shrink-0">
-                    <PostCard post={mainPost} {...postCardProps} />
+                    <PostCard post={mainPost} {...postCardProps} isSaved={postCardProps.currentUser?.savedPostIds?.includes(mainPost.id)} />
                 </div>
                 {/* Other Posts Grid */}
                 {otherPosts.length > 0 && (
@@ -111,16 +114,12 @@ const TrendingSection: React.FC<{
 };
 
 
-const ExploreScreen: React.FC<ExploreScreenProps> = ({
-  currentUser,
-  onReactToPost,
-  onOpenComments,
-  onOpenProfile,
-  onSharePost,
-  onOpenPhotoViewer,
-  onDeletePost,
-  onReportPost,
-}) => {
+const ExploreScreen: React.FC<ExploreScreenProps> = (props) => {
+    const {
+      currentUser,
+      ...restOfProps
+    } = props;
+
     const [categorizedFeed, setCategorizedFeed] = useState<CategorizedExploreFeed | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -128,7 +127,8 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
     const isMobile = useIsMobile();
 
     // Mobile-specific state
-    const [activeTabKey, setActiveTabKey] = useState<keyof CategorizedExploreFeed | 'forYou'>('forYou');
+    // FIX: Correcting the type definition for 'activeTabKey' to ensure it's a valid key of CategorizedExploreFeed, resolving type errors.
+    const [activeTabKey, setActiveTabKey] = useState<keyof CategorizedExploreFeed>('forYou');
     const [isRefreshing, setIsRefreshing] = useState(false);
     const touchStartRef = useRef(0);
     const pullDistanceRef = useRef(0);
@@ -199,14 +199,8 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
     }, [isMobile, fetchExploreFeed]);
 
     const commonPostCardProps = {
+        ...restOfProps,
         currentUser,
-        onReactToPost,
-        onOpenComments,
-        onAuthorClick: onOpenProfile,
-        onSharePost,
-        onOpenPhotoViewer,
-        onDeletePost,
-        onReportPost,
         isActive: true, 
         isPlaying: false,
         onPlayPause: () => {},
@@ -249,8 +243,7 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
     );
     
     const renderMobileView = () => {
-        //FIX: Type 'string' is not assignable to type 'keyof CategorizedExploreFeed'.
-        const activePosts = categorizedFeed?.[activeTabKey as keyof CategorizedExploreFeed] || [];
+        const activePosts = categorizedFeed?.[activeTabKey] || [];
         
         return (
             <div className="h-full w-full flex flex-col">
@@ -285,7 +278,8 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({
                                     <button 
                                         key={post.id} 
                                         className="masonry-item relative group"
-                                        onClick={() => onOpenPhotoViewer(post, previewUrl)}
+                                        // FIX: Replaced direct call to 'onOpenPhotoViewer' with 'props.onOpenPhotoViewer' to correctly access the prop passed to the component.
+                                        onClick={() => props.onOpenPhotoViewer(post, previewUrl)}
                                     >
                                         <img src={previewUrl} alt={post.caption} />
                                         {activeTabKey === 'trending' && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Post, User, ScrollState, Campaign, AppView, Story, Comment } from '../types';
 import { PostCard } from './PostCard';
 import CreatePostWidget from './CreatePostWidget';
@@ -34,13 +34,17 @@ interface FeedScreenProps {
   onNavigate: (view: AppView, props?: any) => void;
   friends: User[];
   setSearchResults: (results: User[]) => void;
+  hiddenPostIds: Set<string>;
+  onHidePost: (postId: string) => void;
+  onSavePost: (post: Post, isSaving: boolean) => void;
+  onCopyLink: (post: Post) => void;
 }
 
 const FeedScreen: React.FC<FeedScreenProps> = ({
     isLoading, posts: initialPosts, currentUser, onSetTtsMessage, lastCommand, onOpenProfile,
     onOpenComments, onReactToPost, onStartCreatePost, onRewardedAdClick, onAdViewed,
     onAdClick, onCommandProcessed, scrollState, onSetScrollState, onNavigate, friends, setSearchResults,
-    onSharePost, onOpenPhotoViewer, onDeletePost, onReportPost
+    onSharePost, onOpenPhotoViewer, onDeletePost, onReportPost, hiddenPostIds, onHidePost, onSavePost, onCopyLink
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [adInjected, setAdInjected] = useState(false);
@@ -57,6 +61,10 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
   const isProgrammaticScroll = useRef(false);
   const currentPostIndexRef = useRef(currentPostIndex);
   currentPostIndexRef.current = currentPostIndex;
+
+  const visiblePosts = useMemo(() => {
+    return posts.filter(p => !hiddenPostIds.has(p.id));
+  }, [posts, hiddenPostIds]);
 
   useEffect(() => {
     setPosts(initialPosts);
@@ -391,7 +399,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         />
         <div className="w-full border-t border-fuchsia-500/20" />
         <RewardedAdWidget campaign={rewardedCampaign} onAdClick={onRewardedAdClick} />
-        {posts.filter(Boolean).map((post, index) => (
+        {visiblePosts.filter(Boolean).map((post, index) => (
             <div 
                 key={`${post.id}-${index}`} 
                 className="w-full"
@@ -421,6 +429,10 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                     onOpenPhotoViewer={onOpenPhotoViewer}
                     onDeletePost={onDeletePost}
                     onReportPost={onReportPost}
+                    isSaved={currentUser.savedPostIds?.includes(post.id)}
+                    onSavePost={onSavePost}
+                    onCopyLink={onCopyLink}
+                    onHidePost={onHidePost}
                 />
             </div>
         ))}

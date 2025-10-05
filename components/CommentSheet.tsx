@@ -138,7 +138,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
                 onReact={(commentId, emoji) => post && onReactToComment(post.id, commentId, emoji)}
                 onEdit={(commentId, newText) => post && onEditComment(post.id, commentId, newText)}
                 onDelete={(commentId) => post && onDeleteComment(post.id, commentId)}
-                onReport={onReportComment}
+                onReportComment={onReportComment}
                 isReply={isReply}
             />
         </div>

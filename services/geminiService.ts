@@ -374,6 +374,9 @@ export const geminiService = {
   listenToFeedPosts: (currentUserId: string, friendIds: string[], blockedUserIds: string[], callback: (posts: Post[]) => void) => {
       return firebaseService.listenToFeedPosts(currentUserId, friendIds, blockedUserIds, callback);
   },
+  getPostsByIds: (postIds: string[]): Promise<Post[]> => firebaseService.getPostsByIds(postIds),
+  savePost: (userId: string, postId: string): Promise<boolean> => firebaseService.savePost(userId, postId),
+  unsavePost: (userId: string, postId: string): Promise<boolean> => firebaseService.unsavePost(userId, postId),
 
   getChatId: (user1Id, user2Id) => firebaseService.getChatId(user1Id, user2Id),
   listenToMessages: (chatId, callback) => firebaseService.listenToMessages(chatId, callback),
@@ -488,6 +491,7 @@ export const geminiService = {
     getPostById: (postId) => firebaseService.getPostById(postId),
     getPendingReports: () => firebaseService.getPendingReports(),
     resolveReport: (reportId, resolution) => firebaseService.resolveReport(reportId, resolution),
+    createReport: (reporter: User, content: Post | Comment | User, contentType: 'post' | 'comment' | 'user', reason: string) => firebaseService.createReport(reporter, content, contentType, reason),
     banUser: (userId) => firebaseService.banUser(userId),
     unbanUser: (userId) => firebaseService.unbanUser(userId),
     warnUser: (userId, message) => firebaseService.warnUser(userId, message),

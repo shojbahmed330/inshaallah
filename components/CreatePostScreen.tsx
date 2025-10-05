@@ -331,10 +331,10 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
             </div>
 
             <footer className="flex-shrink-0 p-4 space-y-4">
-                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
+                 <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*,video/*" multiple className="hidden" />
                 <div className="border border-slate-700 rounded-lg p-3 flex items-center justify-around">
                      <button onClick={handleStartRecording} className="flex items-center gap-2 text-rose-400 font-semibold p-2 rounded-md hover:bg-slate-700/50"><Icon name="mic" className="w-6 h-6"/> Voice</button>
-                     <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 text-green-400 font-semibold p-2 rounded-md hover:bg-slate-700/50"><Icon name="photo" className="w-6 h-6"/> Photo</button>
+                     <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 text-green-400 font-semibold p-2 rounded-md hover:bg-slate-700/50"><Icon name="photo" className="w-6 h-6"/> Photo/Video</button>
                      <button onClick={() => setSubView('feelings')} className="flex items-center gap-2 text-yellow-400 font-semibold p-2 rounded-md hover:bg-slate-700/50"><Icon name="face-smile" className="w-6 h-6"/> Feeling</button>
                 </div>
 

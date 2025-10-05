@@ -89,6 +89,7 @@ export interface User {
   friendshipStatus?: FriendshipStatus;
   pinnedChatIds?: string[];
   archivedChatIds?: string[];
+  savedPostIds?: string[];
 }
 
 export interface Author {

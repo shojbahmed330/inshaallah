@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-// @FIX: 'ScrollState' cannot be used as a value because it was imported using 'import type'.
 import type { Post, User, Comment } from '../types';
 import { ScrollState } from '../types';
 import { PostCard } from './PostCard';
@@ -31,9 +30,12 @@ interface PostDetailScreenProps {
   scrollState: ScrollState;
   onCommandProcessed: () => void;
   onGoBack: () => void;
+  onHidePost: (postId: string) => void;
+  onSavePost: (post: Post, isSaving: boolean) => void;
+  onCopyLink: (post: Post) => void;
 }
 
-const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments, onDeletePost, onReportPost, onReportComment }) => {
+const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedCommentId, currentUser, onSetTtsMessage, lastCommand, onReactToPost, onReactToComment, onOpenProfile, onSharePost, onOpenPhotoViewer, scrollState, onCommandProcessed, onGoBack, onPostComment, onEditComment, onDeleteComment, onOpenComments, onDeletePost, onReportPost, onReportComment, onHidePost, onSavePost, onCopyLink }) => {
   const [post, setPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -219,7 +221,7 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
                       onReact={(commentId, emoji) => onReactToComment(post.id, commentId, emoji)}
                       onEdit={(commentId, newText) => onEditComment(post.id, commentId, newText)}
                       onDelete={(commentId) => onDeleteComment(post.id, commentId)}
-                      onReport={onReportComment}
+                      onReportComment={onReportComment}
                       isReply={isReply}
                   />
               </div>
@@ -263,6 +265,10 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ postId, newlyAddedC
           onOpenPhotoViewer={onOpenPhotoViewer}
           onDeletePost={onDeletePost}
           onReportPost={onReportPost}
+          isSaved={currentUser.savedPostIds?.includes(post.id)}
+          onSavePost={onSavePost}
+          onCopyLink={onCopyLink}
+          onHidePost={onHidePost}
         />
 
         <div className="bg-slate-800/50 rounded-xl p-4">

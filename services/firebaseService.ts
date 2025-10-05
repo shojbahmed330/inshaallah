@@ -1712,6 +1712,28 @@ export const firebaseService = {
             return false;
         }
     },
+
+    // --- Reporting ---
+    async createReport(reporter: User, content: Post | Comment | User, contentType: 'post' | 'comment' | 'user', reason: string): Promise<boolean> {
+        try {
+            const reportedUserId = 'author' in content ? content.author.id : content.id;
+            const reportData: Omit<Report, 'id'> = {
+                reporterId: reporter.id,
+                reporterName: reporter.name,
+                reportedUserId: reportedUserId,
+                reportedContentId: content.id,
+                reportedContentType: contentType,
+                reason: reason,
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+            };
+            await addDoc(collection(db, 'reports'), reportData);
+            return true;
+        } catch (error) {
+            console.error("Error creating report:", error);
+            return false;
+        }
+    },
     
     // @FIX: Added all missing functions for Ads, Groups, and Rooms.
     // --- Ads (for FeedScreen) ---
