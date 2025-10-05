@@ -2291,7 +2291,7 @@ export const firebaseService = {
             const querySnapshot = await getDocs(q);
 
             if (querySnapshot.empty) {
-                return null; // No admin with this email
+                throw new Error("Invalid credentials or insufficient permissions.");
             }
 
             const adminDoc = querySnapshot.docs[0];
@@ -2301,32 +2301,10 @@ export const firebaseService = {
                 return { id: adminDoc.id, email: adminData.email };
             }
 
-            return null; // Incorrect password
+            throw new Error("Invalid credentials or insufficient permissions.");
         } catch (error) {
             console.error("Admin login error:", error);
-            return null;
-        }
-    },
-    adminRegister: async (email, password) => {
-        try {
-            const adminsRef = collection(db, 'admins');
-            const q = query(adminsRef, where("email", "==", email.toLowerCase()));
-            const querySnapshot = await getDocs(q);
-
-            if (!querySnapshot.empty) {
-                return null; // Admin with this email already exists
-            }
-
-            const newAdminDocRef = await addDoc(adminsRef, {
-                email: email.toLowerCase(),
-                password: password, // In a real app, hash this password
-                createdAt: serverTimestamp(),
-            });
-
-            return { id: newAdminDocRef.id, email: email.toLowerCase() };
-        } catch (error) {
-            console.error("Admin registration error:", error);
-            return null;
+            throw error; // Re-throw to be caught by the UI
         }
     },
     getAdminDashboardStats: async () => ({ totalUsers: 0, newUsersToday: 0, postsLast24h: 0, pendingCampaigns: 0, activeUsersNow: 0, pendingReports: 0, pendingPayments: 0 }),
@@ -2362,6 +2340,7 @@ export const firebaseService = {
     getPostById: async (postId) => null,
     getPendingReports: async () => [],
     resolveReport: async (reportId, resolution) => {},
+    createReport: async (reporter: User, content: Post | Comment | User, contentType: 'post' | 'comment' | 'user', reason: string) => true,
     banUser: async (userId) => true,
     unbanUser: async (userId) => true,
     warnUser: async (userId, message) => {
@@ -2379,8 +2358,8 @@ export const firebaseService = {
     verifyCampaignPayment: async (campaignId, adminId) => true,
     adminUpdateUserProfilePicture: async (userId, base64) => null,
     reactivateUserAsAdmin: async (userId) => true,
-    promoteGroupMember: async (groupId: string, userToPromote: User, newRole: 'Admin' | 'Moderator') => firebaseService.promoteGroupMember(groupId, userToPromote, newRole),
-    demoteGroupMember: async (groupId: string, userToDemote: User, oldRole: 'Admin' | 'Moderator') => firebaseService.demoteGroupMember(groupId, userToDemote, oldRole),
+    promoteGroupMember: async (groupId: string, userToPromote: User, newRole: 'Admin' | 'Moderator') => true,
+    demoteGroupMember: async (groupId: string, userToDemote: User, oldRole: 'Admin' | 'Moderator') => true,
     async removeGroupMember(groupId: string, userToRemove: User): Promise<boolean> {
         const groupRef = doc(db, 'groups', groupId);
         const userRef = doc(db, 'users', userToRemove.id);
