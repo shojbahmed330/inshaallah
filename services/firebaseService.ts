@@ -1781,322 +1781,82 @@ export const firebaseService = {
         }
     },
     
-    // --- Admin Panel ---
-    adminLogin: async (email, password) => {
-        try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            const adminDocRef = doc(db, 'admins', user.uid);
-            const adminDoc = await getDoc(adminDocRef);
-
-            if (adminDoc.exists()) {
-                return { id: user.uid, email: user.email! };
-            } else {
-                await signOut(auth);
-                throw new Error("You do not have permission to access the admin panel.");
-            }
-        } catch (error: any) {
-            console.error("Admin login error:", error);
-            if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                throw new Error("Invalid email or password.");
-            }
-            throw error;
-        }
-    },
-    async getAdminDashboardStats() {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-        const usersQuery = getDocs(collection(db, 'users'));
-        const newUsersQuery = getDocs(query(collection(db, 'users'), where('createdAt', '>=', twentyFourHoursAgo)));
-        const activeUsersQuery = getDocs(query(collection(db, 'users'), where('onlineStatus', '==', 'online')));
-        const newPostsQuery = getDocs(query(collection(db, 'posts'), where('createdAt', '>=', twentyFourHoursAgo)));
-        const pendingCampaignsQuery = getDocs(query(collection(db, 'campaigns'), where('status', '==', 'pending')));
-        const pendingReportsQuery = getDocs(query(collection(db, 'reports'), where('status', '==', 'pending')));
-        const pendingPaymentsQuery = getDocs(query(collection(db, 'campaigns'), where('paymentStatus', '==', 'pending')));
-
-        const [
-            usersSnap,
-            newUsersSnap,
-            activeUsersSnap,
-            newPostsSnap,
-            pendingCampaignsSnap,
-            pendingReportsSnap,
-            pendingPaymentsSnap
-        ] = await Promise.all([
-            usersQuery,
-            newUsersQuery,
-            activeUsersQuery,
-            newPostsQuery,
-            pendingCampaignsQuery,
-            pendingReportsQuery,
-            pendingPaymentsQuery
-        ]);
-
-        return {
-            totalUsers: usersSnap.size,
-            newUsersToday: newUsersSnap.size,
-            activeUsersNow: activeUsersSnap.size,
-            postsLast24h: newPostsSnap.size,
-            pendingCampaigns: pendingCampaignsSnap.size,
-            pendingReports: pendingReportsSnap.size,
-            pendingPayments: pendingPaymentsSnap.size
-        };
-    },
-    getAllUsersForAdmin: async () => {
-        const snapshot = await getDocs(collection(db, 'users'));
-        return snapshot.docs.map(docToUser);
-    },
-    updateUserRole: async (userId, newRole) => true,
-    getPendingCampaigns: async () => {
-        const campaignsRef = collection(db, 'campaigns');
-        const q = query(campaignsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    // --- Ads (for FeedScreen) ---
+    async getInjectableStoryAd(currentUser: User): Promise<Story | null> {
+        const q = query(collection(db, 'campaigns'), where('status', '==', 'active'), where('adType', '==', 'story'), limit(10));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Campaign));
-    },
-    approveCampaign: async (campaignId) => {
-        const campaignRef = doc(db, 'campaigns', campaignId);
-        const campaignDoc = await getDoc(campaignRef);
-        if (campaignDoc.exists()) {
-            await updateDoc(campaignRef, { status: 'active' });
-            const campaign = campaignDoc.data();
-            const actor = { id: 'admin', name: 'VoiceBook Admin' } as User;
-            await _createNotification(campaign.sponsorId, 'campaign_approved', actor, { campaignName: campaign.sponsorName });
-        }
-    },
-    rejectCampaign: async (campaignId, reason) => {
-        const campaignRef = doc(db, 'campaigns', campaignId);
-        const campaignDoc = await getDoc(campaignRef);
-        if (campaignDoc.exists()) {
-            await updateDoc(campaignRef, { status: 'rejected' });
-            const campaign = campaignDoc.data();
-            const actor = { id: 'admin', name: 'VoiceBook Admin' } as User;
-            await _createNotification(campaign.sponsorId, 'campaign_rejected', actor, { campaignName: campaign.sponsorName, rejectionReason: reason });
-        }
-    },
-    async getAllPostsForAdmin() {
-        const snapshot = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
-        return snapshot.docs.map(docToPost);
-    },
-    async deletePostAsAdmin(postId: string): Promise<boolean> {
-        try {
-            await deleteDoc(doc(db, 'posts', postId));
-            return true;
-        } catch (error) {
-            console.error("Admin failed to delete post:", error);
-            return false;
-        }
-    },
-    async deleteCommentAsAdmin(commentId: string, postId: string): Promise<boolean> {
-        const postRef = doc(db, 'posts', postId);
-        try {
-            await runTransaction(db, async (transaction) => {
-                const postDoc = await transaction.get(postRef);
-                if (!postDoc.exists()) throw "Post not found";
-                const comments = postDoc.data().comments.filter(c => c.id !== commentId);
-                transaction.update(postRef, { comments, commentCount: increment(-1) });
-            });
-            return true;
-        } catch (error) {
-            console.error("Admin failed to delete comment:", error);
-            return false;
-        }
-    },
-    async getPostById(postId: string): Promise<Post | null> {
-        const postRef = doc(db, 'posts', postId);
-        const postDoc = await getDoc(postRef);
-        return postDoc.exists() ? docToPost(postDoc) : null;
-    },
-    async getPendingReports(): Promise<Report[]> {
-        try {
-            const reportsRef = collection(db, 'reports');
-            // This query requires a composite index on ('status', 'createdAt' desc). If it fails, the catch block will run.
-            const q = query(reportsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                // BUG FIX: Ensure createdAt is converted from Timestamp
-                createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
-            } as Report));
-        } catch (error) {
-            console.error("Error fetching pending reports (likely a missing index):", error);
-            // Fallback query without ordering to avoid index-related crashes.
-            try {
-                const reportsRef = collection(db, 'reports');
-                const q = query(reportsRef, where('status', '==', 'pending'));
-                const snapshot = await getDocs(q);
-                const reports = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
-                } as Report));
-                // Manually sort by date descending
-                reports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                return reports;
-            } catch (fallbackError) {
-                console.error("Fallback query for pending reports also failed:", fallbackError);
-                return []; // Return empty array to unblock UI.
-            }
-        }
-    },
-    async resolveReport(reportId: string, resolution: string): Promise<void> {
-        const reportRef = doc(db, 'reports', reportId);
-        await updateDoc(reportRef, {
-            status: 'resolved',
-            resolution: resolution,
-        });
-    },
-    async banUser(userId: string): Promise<boolean> {
-        const userRef = doc(db, 'users', userId);
-        try {
-            await updateDoc(userRef, { isBanned: true });
-            const actor = { id: 'admin', name: 'VoiceBook Admin', avatarUrl: '', username: 'admin' } as User;
-            await _createNotification(userId, 'admin_warning', actor, { message: "Your account has been permanently banned due to violations of our community guidelines." });
-            return true;
-        } catch (error) {
-            console.error("Error banning user:", error);
-            return false;
-        }
-    },
-    async unbanUser(userId: string): Promise<boolean> {
-        const userRef = doc(db, 'users', userId);
-        try {
-            await updateDoc(userRef, { isBanned: false });
-            return true;
-        } catch (error) {
-            console.error("Error unbanning user:", error);
-            return false;
-        }
-    },
-    async warnUser(userId: string, message: string): Promise<boolean> {
-        try {
-            const actor = { id: 'admin', name: 'VoiceBook Admin', avatarUrl: '', username: 'admin' } as User;
-            await _createNotification(userId, 'admin_warning', actor, { message });
-            return true;
-        } catch (error) {
-            console.error("Error sending warning to user:", error);
-            return false;
-        }
-    },
-    async suspendUserCommenting(userId: string, days: number): Promise<boolean> {
-        const userRef = doc(db, 'users', userId);
-        try {
-            const suspensionEndDate = new Date();
-            suspensionEndDate.setDate(suspensionEndDate.getDate() + days);
-            await updateDoc(userRef, { commentingSuspendedUntil: suspensionEndDate.toISOString() });
-            
-            const actor = { id: 'admin', name: 'VoiceBook Admin', avatarUrl: '', username: 'admin' } as User;
-            const message = `Your ability to comment has been suspended for ${days} day(s) due to community guideline violations.`;
-            await _createNotification(userId, 'admin_warning', actor, { message });
+        if (snapshot.empty) return null;
+        const campaigns = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Campaign[];
+        const matchingCampaign = campaigns.find(c => matchesTargeting(c, currentUser));
 
-            return true;
-        } catch (error) {
-            console.error("Error suspending user commenting:", error);
-            return false;
-        }
-    },
-    async liftUserCommentingSuspension(userId: string): Promise<boolean> {
-        const userRef = doc(db, 'users', userId);
-        try {
-            await updateDoc(userRef, { commentingSuspendedUntil: deleteField() });
-            return true;
-        } catch (error) {
-            console.error("Error lifting user commenting suspension:", error);
-            return false;
-        }
-    },
-    async suspendUserPosting(userId: string, days: number): Promise<boolean> {
-        const userRef = doc(db, 'users', userId);
-        try {
-            const suspensionEndDate = new Date();
-            suspensionEndDate.setDate(suspensionEndDate.getDate() + days);
-            await updateDoc(userRef, { postingSuspendedUntil: suspensionEndDate.toISOString() });
-            
-            const actor = { id: 'admin', name: 'VoiceBook Admin', avatarUrl: '', username: 'admin' } as User;
-            const message = `Your ability to create posts has been suspended for ${days} day(s) due to community guideline violations.`;
-            await _createNotification(userId, 'admin_warning', actor, { message });
+        if (matchingCampaign) {
+            const sponsor = await firebaseService.getUserProfileById(matchingCampaign.sponsorId);
+            if (!sponsor) return null;
 
-            return true;
-        } catch (error) {
-            console.error("Error suspending user posting:", error);
-            return false;
+            return {
+                id: `ad_${matchingCampaign.id}`,
+                author: sponsor,
+                type: 'image',
+                contentUrl: matchingCampaign.imageUrl,
+                duration: 10,
+                createdAt: new Date().toISOString(),
+                viewedBy: [],
+                privacy: 'public',
+                isSponsored: true,
+                sponsorName: matchingCampaign.sponsorName,
+                sponsorAvatar: sponsor.avatarUrl,
+                campaignId: matchingCampaign.id,
+                ctaLink: matchingCampaign.websiteUrl,
+            };
         }
+        return null;
     },
-    async liftUserPostingSuspension(userId: string): Promise<boolean> {
-        const userRef = doc(db, 'users', userId);
-        try {
-            await updateDoc(userRef, { postingSuspendedUntil: deleteField() });
-            return true;
-        } catch (error) {
-            console.error("Error lifting user posting suspension:", error);
-            return false;
+
+    async getInjectableAd(currentUser: User): Promise<Post | null> {
+        const q = query(collection(db, 'campaigns'), where('status', '==', 'active'), where('adType', '==', 'feed'), limit(20));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return null;
+        const campaigns = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as Campaign[];
+        const matchingCampaign = campaigns.find(c => matchesTargeting(c, currentUser));
+
+        if (matchingCampaign) {
+            const sponsor = await firebaseService.getUserProfileById(matchingCampaign.sponsorId);
+            if (!sponsor) return null;
+
+            return {
+                id: `ad_${matchingCampaign.id}`,
+                author: sponsor,
+                caption: matchingCampaign.caption,
+                createdAt: new Date().toISOString(),
+                imageUrl: matchingCampaign.imageUrl,
+                videoUrl: matchingCampaign.videoUrl,
+                audioUrl: matchingCampaign.audioUrl,
+                duration: 0,
+                reactions: {},
+                commentCount: 0,
+                comments: [],
+                isSponsored: true,
+                sponsorName: matchingCampaign.sponsorName,
+                campaignId: matchingCampaign.id,
+                sponsorId: matchingCampaign.sponsorId,
+                websiteUrl: matchingCampaign.websiteUrl,
+                allowDirectMessage: matchingCampaign.allowDirectMessage,
+                allowLeadForm: matchingCampaign.allowLeadForm,
+            };
         }
+        return null;
     },
-    async getUserDetailsForAdmin(userId: string) {
-        const user = await firebaseService.getUserProfileById(userId);
-        if (!user) return null;
 
-        const postsQuery = query(collection(db, 'posts'), where('author.id', '==', userId), orderBy('createdAt', 'desc'), limit(20));
-        const reportsQuery = query(collection(db, 'reports'), where('reportedUserId', '==', userId), orderBy('createdAt', 'desc'), limit(20));
-        
-        // PERFORMANCE FIX: Limit the comment search to the 200 most recent posts to avoid fetching the entire collection.
-        const allPostsForCommentsQuery = getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(200)));
-
-        try {
-            const [postsSnap, reportsSnap, allPostsSnap] = await Promise.all([getDocs(postsQuery), getDocs(reportsQuery), allPostsForCommentsQuery]);
-            
-            const posts = postsSnap.docs.map(docToPost);
-            const reports = reportsSnap.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                // BUG FIX: Ensure createdAt is converted from Timestamp
-                createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
-            } as Report));
-            
-            // TYPE FIX: `CommentType` is not defined; use `Comment` from types.ts.
-            const comments: (Comment & { postId: string })[] = [];
-            allPostsSnap.forEach(postDoc => {
-                const postData = postDoc.data();
-                if (postData.comments && Array.isArray(postData.comments)) {
-                    postData.comments.forEach((comment: any) => {
-                        if (comment.author && comment.author.id === userId) {
-                            comments.push({ 
-                                ...comment, 
-                                postId: postDoc.id,
-                                // BUG FIX: Ensure createdAt is converted from Timestamp
-                                createdAt: comment.createdAt instanceof Timestamp ? comment.createdAt.toDate().toISOString() : comment.createdAt,
-                            });
-                        }
-                    });
-                }
-            });
-            
-            // Sort comments by date since they are collected from various posts
-            comments.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-            return { user, posts, comments, reports };
-        } catch (error) {
-            console.error("Error fetching user details for admin:", error);
-            // Return partial data or null to unblock the UI from an infinite loading state.
-            return { user, posts: [], comments: [], reports: [] };
-        }
-    },
-    sendSiteWideAnnouncement: async (message) => true,
-    getAllCampaignsForAdmin: async () => [],
-    verifyCampaignPayment: async (campaignId, adminId) => true,
-    adminUpdateUserProfilePicture: async (userId, base64) => null,
-    reactivateUserAsAdmin: async (userId) => true,
-    promoteGroupMember: async (groupId: string, userToPromote: User, newRole: 'Admin' | 'Moderator') => firebaseService.promoteGroupMember(groupId, userToPromote, newRole),
-    demoteGroupMember: async (groupId: string, userToDemote: User, oldRole: 'Admin' | 'Moderator') => firebaseService.demoteGroupMember(groupId, userToDemote, oldRole),
-    async removeGroupMember(groupId: string, userToRemove: User): Promise<boolean> {
+    async leaveGroup(userId: string, groupId: string): Promise<boolean> {
         const groupRef = doc(db, 'groups', groupId);
-        const userRef = doc(db, 'users', userToRemove.id);
-        const memberObject = { id: userToRemove.id, name: userToRemove.name, username: userToRemove.username, avatarUrl: userToRemove.avatarUrl };
+        const userRef = doc(db, 'users', userId);
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return false;
+        const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
         try {
             await updateDoc(groupRef, {
                 members: arrayRemove(memberObject),
-                memberIds: arrayRemove(userToRemove.id),
+                memberIds: arrayRemove(userId),
                 memberCount: increment(-1),
                 admins: arrayRemove(memberObject),
                 moderators: arrayRemove(memberObject),
@@ -2104,122 +1864,214 @@ export const firebaseService = {
             await updateDoc(userRef, { groupIds: arrayRemove(groupId) });
             return true;
         } catch (error) {
-            console.error("Error removing group member:", error);
+            console.error("Error leaving group:", error);
             return false;
         }
     },
-    async approveJoinRequest(groupId: string, userId: string): Promise<void> {
-        const groupRef = doc(db, 'groups', groupId);
-        const userRef = doc(db, 'users', userId);
-        
-        await runTransaction(db, async (transaction) => {
-            const groupDoc = await transaction.get(groupRef);
-            const userDoc = await transaction.get(userRef);
-            if (!groupDoc.exists() || !userDoc.exists()) throw "Group or user not found";
-    
-            const groupData = groupDoc.data() as Group;
-            const userData = userDoc.data() as User;
-    
-            const updatedRequests = (groupData.joinRequests || []).filter(req => req.user.id !== userId);
-            const memberObject = { id: userData.id, name: userData.name, username: userData.username, avatarUrl: userData.avatarUrl };
-    
-            transaction.update(groupRef, {
-                joinRequests: updatedRequests,
-                members: arrayUnion(memberObject),
-                memberIds: arrayUnion(userId),
-                memberCount: increment(1)
-            });
-    
-            transaction.update(userRef, { groupIds: arrayUnion(groupId) });
+
+    // --- Rooms ---
+    listenToRoom(roomId: string, type: 'audio' | 'video', callback: (room: any | null) => void): () => void {
+        const collectionName = type === 'audio' ? 'liveAudioRooms' : 'liveVideoRooms';
+        const roomRef = doc(db, collectionName, roomId);
+        return onSnapshot(roomRef, (doc) => {
+            if (doc.exists()) {
+                callback({ id: doc.id, ...doc.data() });
+            } else {
+                callback(null);
+            }
         });
     },
-    rejectJoinRequest: async (groupId: string, userId: string) => true,
-    approvePost: async (postId: string) => true,
-    rejectPost: async (postId: string) => true,
-    joinGroup: async (userId, groupId, answers) => {
-         const groupRef = doc(db, 'groups', groupId);
-         const user = await firebaseService.getUserProfileById(userId);
-         if (!user) return false;
-         const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
-         const groupDoc = await getDoc(groupRef);
-         if (!groupDoc.exists()) return false;
-         const group = groupDoc.data() as Group;
-
-         if (group.privacy === 'public') {
-             await updateDoc(groupRef, {
-                 members: arrayUnion(memberObject),
-                 memberIds: arrayUnion(user.id),
-                 memberCount: increment(1)
-             });
-             const userRef = doc(db, 'users', userId);
-             await updateDoc(userRef, { groupIds: arrayUnion(groupId) });
-         } else {
-             const request = { user: memberObject, answers: answers || [] };
-             await updateDoc(groupRef, { joinRequests: arrayUnion(request) });
-             const admins = group.admins || [group.creator];
-             for (const admin of admins) {
-                 await _createNotification(admin.id, 'group_join_request', user, { groupId, groupName: group.name });
-             }
-         }
-         return true;
+    async joinLiveAudioRoom(userId: string, roomId: string): Promise<void> {
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return;
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
+        await updateDoc(roomRef, { listeners: arrayUnion(author) });
     },
-    async getAgoraToken(channelName: string, uid: string | number): Promise<string | null> {
-        const TOKEN_SERVER_URL = '/api/proxy';
-        try {
-            const response = await fetch(`${TOKEN_SERVER_URL}?channelName=${channelName}&uid=${uid}`);
-            if (!response.ok) throw new Error(`Token server responded with ${response.status}`);
-            const data = await response.json();
-            return data.rtcToken;
-        } catch (error) {
-            console.error("Could not fetch Agora token.", error);
-            return null;
+    async joinLiveVideoRoom(userId: string, roomId: string): Promise<void> {
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return;
+        const roomRef = doc(db, 'liveVideoRooms', roomId);
+        const participantState: VideoParticipantState = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username, isMuted: true, isCameraOff: true };
+        await updateDoc(roomRef, { participants: arrayUnion(participantState) });
+    },
+    async leaveLiveAudioRoom(userId: string, roomId: string): Promise<void> {
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return;
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
+        await updateDoc(roomRef, {
+            listeners: arrayRemove(author),
+            speakers: arrayRemove(author),
+            raisedHands: arrayRemove(userId),
+        });
+    },
+    async leaveLiveVideoRoom(userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveVideoRooms', roomId);
+        const roomDoc = await getDoc(roomRef);
+        if (roomDoc.exists()) {
+            const roomData = roomDoc.data() as LiveVideoRoom;
+            const updatedParticipants = roomData.participants.filter(p => p.id !== userId);
+            await updateDoc(roomRef, { participants: updatedParticipants });
         }
     },
+    async endLiveAudioRoom(userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const roomDoc = await getDoc(roomRef);
+        if (roomDoc.exists() && roomDoc.data().host.id === userId) {
+            await updateDoc(roomRef, { status: 'ended' });
+        }
+    },
+    async endLiveVideoRoom(userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveVideoRooms', roomId);
+        const roomDoc = await getDoc(roomRef);
+        if (roomDoc.exists() && roomDoc.data().host.id === userId) {
+            await updateDoc(roomRef, { status: 'ended' });
+        }
+    },
+    async getAudioRoomDetails(roomId: string): Promise<LiveAudioRoom | null> {
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const roomDoc = await getDoc(roomRef);
+        return roomDoc.exists() ? { id: roomDoc.id, ...roomDoc.data() } as LiveAudioRoom : null;
+    },
+    async getRoomDetails(roomId: string, type: 'audio' | 'video'): Promise<any | null> {
+        const collectionName = type === 'audio' ? 'liveAudioRooms' : 'liveVideoRooms';
+        const roomRef = doc(db, collectionName, roomId);
+        const roomDoc = await getDoc(roomRef);
+        return roomDoc.exists() ? { id: doc.id, ...doc.data() } : null;
+    },
+    async raiseHandInAudioRoom(userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        await updateDoc(roomRef, { raisedHands: arrayUnion(userId) });
+    },
+    async inviteToSpeakInAudioRoom(hostId: string, userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const roomDoc = await getDoc(roomRef);
+        if (!roomDoc.exists() || roomDoc.data().host.id !== hostId) return;
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return;
+        const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
+        await updateDoc(roomRef, {
+            speakers: arrayUnion(author),
+            listeners: arrayRemove(author),
+            raisedHands: arrayRemove(userId),
+        });
+    },
+    async moveToAudienceInAudioRoom(hostId: string, userId: string, roomId: string): Promise<void> {
+        const roomRef = doc(db, 'liveAudioRooms', roomId);
+        const roomDoc = await getDoc(roomRef);
+        if (!roomDoc.exists() || roomDoc.data().host.id !== hostId) return;
+        const user = await firebaseService.getUserProfileById(userId);
+        if (!user) return;
+        const author = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, username: user.username };
+        await updateDoc(roomRef, {
+            speakers: arrayRemove(author),
+            listeners: arrayUnion(author),
+        });
+    },
+    listenToLiveAudioRoomMessages(roomId: string, callback: (messages: LiveAudioRoomMessage[]) => void): () => void {
+        const messagesRef = collection(db, 'liveAudioRooms', roomId, 'messages');
+        const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(100));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LiveAudioRoomMessage)));
+        });
+    },
+    async sendLiveAudioRoomMessage(roomId: string, sender: User, text: string, isHost: boolean, isSpeaker: boolean): Promise<void> {
+        const messagesRef = collection(db, 'liveAudioRooms', roomId, 'messages');
+        await addDoc(messagesRef, {
+            sender: { id: sender.id, name: sender.name, avatarUrl: sender.avatarUrl, username: sender.username },
+            text, isHost, isSpeaker, reactions: {}, createdAt: serverTimestamp(),
+        });
+    },
+    async reactToLiveAudioRoomMessage(roomId: string, messageId: string, userId: string, emoji: string): Promise<void> {
+        const messageRef = doc(db, 'liveAudioRooms', roomId, 'messages', messageId);
+        await runTransaction(db, async (transaction) => {
+            const messageDoc = await transaction.get(messageRef);
+            if (!messageDoc.exists()) return;
+            const reactions = messageDoc.data().reactions || {};
+            const userIds = reactions[emoji] || [];
+            if (!userIds.includes(userId)) {
+                userIds.push(userId);
+            }
+            reactions[emoji] = userIds;
+            transaction.update(messageRef, { reactions });
+        });
+    },
+    listenToLiveVideoRoomMessages(roomId: string, callback: (messages: LiveVideoRoomMessage[]) => void): () => void {
+        const messagesRef = collection(db, 'liveVideoRooms', roomId, 'messages');
+        const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(100));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LiveVideoRoomMessage)));
+        });
+    },
+    async sendLiveVideoRoomMessage(roomId: string, sender: User, text: string): Promise<void> {
+        const messagesRef = collection(db, 'liveVideoRooms', roomId, 'messages');
+        await addDoc(messagesRef, {
+            sender: { id: sender.id, name: sender.name, avatarUrl: sender.avatarUrl, username: sender.username },
+            text, createdAt: serverTimestamp(),
+        });
+    },
+    async updateParticipantStateInVideoRoom(roomId: string, userId: string, updates: Partial<VideoParticipantState>): Promise<void> {
+        const roomRef = doc(db, 'liveVideoRooms', roomId);
+        await runTransaction(db, async (transaction) => {
+            const roomDoc = await transaction.get(roomRef);
+            if (!roomDoc.exists()) return;
+            const roomData = roomDoc.data() as LiveVideoRoom;
+            const participants = roomData.participants.map(p => p.id === userId ? { ...p, ...updates } : p);
+            transaction.update(roomRef, { participants });
+        });
+    },
+
     // --- 1-on-1 Calls ---
-    async createCall(caller: Author, callee: User, chatId: string, type: 'audio' | 'video'): Promise<string> {
-        const callRef = collection(db, 'calls');
-        const newCall: Omit<Call, 'id'> = {
-            caller,
-            callee,
+    async createCall(caller: User, callee: User, chatId: string, type: 'audio' | 'video'): Promise<string> {
+        const callRef = doc(collection(db, 'calls'));
+        const callData: Omit<Call, 'id'> = {
+            caller: { id: caller.id, name: caller.name, username: caller.username, avatarUrl: caller.avatarUrl },
+            callee: { id: callee.id, name: callee.name, username: callee.username, avatarUrl: callee.avatarUrl },
             chatId,
             type,
             status: 'ringing',
             createdAt: new Date().toISOString(),
         };
-        const docRef = await addDoc(callRef, { ...newCall, createdAt: serverTimestamp() });
-        return docRef.id;
+        await setDoc(callRef, callData);
+        return callRef.id;
     },
 
-    listenForIncomingCalls(userId: string, callback: (call: Call) => void): () => void {
+    listenForIncomingCalls(userId: string, callback: (call: Call | null) => void): () => void {
         const callsRef = collection(db, 'calls');
-        const q = query(callsRef, where('callee.id', '==', userId), where('status', '==', 'ringing'));
+        const q = query(callsRef,
+            where('callee.id', '==', userId),
+            where('status', '==', 'ringing'),
+            limit(1));
 
-        return onSnapshot(q, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    const callData = change.doc.data();
-                    const call = { 
-                        id: change.doc.id, 
-                        ...callData,
-                        createdAt: callData.createdAt instanceof Timestamp ? callData.createdAt.toDate().toISOString() : callData.createdAt,
-                    } as Call;
-                    callback(call);
-                }
-            });
+        return onSnapshot(q, snapshot => {
+            if (snapshot.empty) {
+                callback(null);
+                return;
+            }
+            const doc = snapshot.docs[0];
+            const data = doc.data();
+            const call: Call = {
+                id: doc.id,
+                ...data,
+                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+            } as Call;
+            callback(call);
         });
     },
 
     listenToCall(callId: string, callback: (call: Call | null) => void): () => void {
         const callRef = doc(db, 'calls', callId);
-        return onSnapshot(callRef, (doc) => {
+        return onSnapshot(callRef, doc => {
             if (doc.exists()) {
-                const callData = doc.data();
-                callback({ 
-                    id: doc.id, 
-                    ...callData,
-                    createdAt: callData.createdAt instanceof Timestamp ? callData.createdAt.toDate().toISOString() : callData.createdAt,
-                    endedAt: callData.endedAt instanceof Timestamp ? callData.endedAt.toDate().toISOString() : callData.endedAt,
-                } as Call);
+                const data = doc.data();
+                 const call: Call = {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+                    endedAt: data.endedAt instanceof Timestamp ? data.endedAt.toDate().toISOString() : data.endedAt,
+                } as Call;
+                callback(call);
             } else {
                 callback(null);
             }
@@ -2228,8 +2080,12 @@ export const firebaseService = {
 
     async updateCallStatus(callId: string, status: Call['status']): Promise<void> {
         const callRef = doc(db, 'calls', callId);
-        const updateData: any = { status };
-        if (['ended', 'declined', 'missed', 'rejected'].includes(status)) {
+        const updateData: { status: Call['status'], endedAt?: any } = { status };
+
+        const callDocBeforeUpdate = await getDoc(callRef);
+        const callDataBeforeUpdate = callDocBeforeUpdate.data() as Call;
+
+        if (['ended', 'rejected', 'missed', 'declined'].includes(status)) {
             updateData.endedAt = serverTimestamp();
         }
         await updateDoc(callRef, updateData);
@@ -2331,85 +2187,6 @@ export const firebaseService = {
     trackAdClick: async (campaignId) => updateDoc(doc(db, 'campaigns', campaignId), { clicks: increment(1) }),
     submitLead: async (leadData) => addDoc(collection(db, 'leads'), { ...leadData, createdAt: serverTimestamp() }),
     getLeadsForCampaign: async (campaignId) => [],
-    // FIX: Implement getInjectableAd to fetch a suitable ad from campaigns.
-    async getInjectableAd(currentUser: User): Promise<Post | null> {
-        const campaignsRef = collection(db, 'campaigns');
-        const q = query(campaignsRef, where('status', '==', 'active'), where('adType', '==', 'feed'));
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) return null;
-
-        const allActiveCampaigns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Campaign));
-        const targetedCampaigns = allActiveCampaigns.filter(c => matchesTargeting(c, currentUser));
-        
-        const campaign = targetedCampaigns[Math.floor(Math.random() * targetedCampaigns.length)];
-
-        if (!campaign) return null;
-
-        const sponsor = await firebaseService.getUserProfileById(campaign.sponsorId);
-        if (!sponsor) return null;
-
-        return {
-            id: `ad_${campaign.id}`,
-            author: {
-                id: sponsor.id,
-                name: sponsor.name,
-                username: sponsor.username,
-                avatarUrl: sponsor.avatarUrl,
-            },
-            caption: campaign.caption,
-            createdAt: new Date().toISOString(),
-            imageUrl: campaign.imageUrl,
-            videoUrl: campaign.videoUrl,
-            audioUrl: campaign.audioUrl,
-            reactions: {},
-            commentCount: 0,
-            comments: [],
-            isSponsored: true,
-            sponsorName: campaign.sponsorName,
-            sponsorId: campaign.sponsorId,
-            campaignId: campaign.id,
-            websiteUrl: campaign.websiteUrl,
-            allowDirectMessage: campaign.allowDirectMessage,
-            allowLeadForm: campaign.allowLeadForm,
-            duration: 0, // Not applicable for ad posts of this type
-        };
-    },
-    // FIX: Implement getInjectableStoryAd to fetch a suitable ad from campaigns.
-    async getInjectableStoryAd(currentUser: User): Promise<Story | null> {
-        const campaignsRef = collection(db, 'campaigns');
-        const q = query(collection(db, 'campaigns'), where('status', '==', 'active'), where('adType', '==', 'story'));
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) return null;
-
-        const allActiveCampaigns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Campaign));
-        const targetedCampaigns = allActiveCampaigns.filter(c => matchesTargeting(c, currentUser));
-        
-        const campaign = targetedCampaigns[Math.floor(Math.random() * targetedCampaigns.length)];
-
-        if (!campaign) return null;
-
-        const sponsor = await firebaseService.getUserProfileById(campaign.sponsorId);
-        if (!sponsor) return null;
-        
-        let storyType: 'image' | 'video' = 'image';
-        if (campaign.videoUrl) storyType = 'video';
-
-        return {
-            id: `ad_story_${campaign.id}`,
-            author: sponsor, // The story type expects a full User object.
-            type: storyType,
-            contentUrl: campaign.videoUrl || campaign.imageUrl,
-            duration: 15, // standard story ad duration
-            createdAt: new Date().toISOString(),
-            viewedBy: [],
-            privacy: 'public',
-            isSponsored: true,
-            sponsorName: campaign.sponsorName,
-            sponsorAvatar: sponsor.avatarUrl,
-            campaignId: campaign.id,
-            ctaLink: campaign.websiteUrl,
-        };
-    },
     getStories: async (currentUserId) => [],
     markStoryAsViewed: async (storyId, userId) => updateDoc(doc(db, 'stories', storyId), { viewedBy: arrayUnion(userId) }),
     createStory: async (storyData, mediaFile) => ({...storyData, id: '', createdAt: new Date().toISOString(), duration: 5, viewedBy: []}),
