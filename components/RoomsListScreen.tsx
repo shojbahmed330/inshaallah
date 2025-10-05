@@ -55,6 +55,7 @@ const RoomsListScreen: React.FC<RoomsListScreenProps> = ({ currentUser, onNaviga
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
+    if (!currentUser) return; // Guard against running before user is loaded
     setIsLoading(true);
     const unsubscribe = geminiService.listenToLiveAudioRooms((liveRooms) => {
       setRooms(liveRooms);
@@ -62,7 +63,7 @@ const RoomsListScreen: React.FC<RoomsListScreenProps> = ({ currentUser, onNaviga
     });
 
     return () => unsubscribe(); // Unsubscribe on cleanup
-  }, []);
+  }, [currentUser]); // Add currentUser as a dependency
   
   const handleJoinRoom = (roomId: string) => {
     onNavigate(AppView.LIVE_ROOM, { roomId });

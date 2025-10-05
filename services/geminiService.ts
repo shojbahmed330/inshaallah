@@ -136,6 +136,32 @@ let NLU_INTENT_LIST = `
 - intent_cancel_friend_request (extracts 'target_name')
 `;
 
+// Define a schema for the Post object to be returned by Gemini
+const postSchemaProperties = {
+    type: Type.OBJECT,
+    properties: {
+        id: { type: Type.STRING },
+        author: {
+            type: Type.OBJECT,
+            properties: {
+                id: { type: Type.STRING },
+                name: { type: Type.STRING },
+                username: { type: Type.STRING },
+                avatarUrl: { type: Type.STRING },
+            }
+        },
+        caption: { type: Type.STRING },
+        createdAt: { type: Type.STRING },
+        reactions: { type: Type.OBJECT }, // Simplified for the model
+        commentCount: { type: Type.NUMBER },
+        imageUrl: { type: Type.STRING },
+        videoUrl: { type: Type.STRING },
+        audioUrl: { type: Type.STRING },
+        postType: { type: Type.STRING },
+        isSponsored: { type: Type.BOOLEAN },
+    }
+};
+
 export const geminiService = {
   // --- NLU ---
   async processIntent(command: string, context?: { userNames?: string[], groupNames?: string[], themeNames?: string[] }): Promise<NLUResponse> {
@@ -540,11 +566,11 @@ export const geminiService = {
                     responseSchema: {
                         type: Type.OBJECT,
                         properties: {
-                            trending: { type: Type.ARRAY, items: { type: Type.OBJECT } },
-                            forYou: { type: Type.ARRAY, items: { type: Type.OBJECT } },
-                            recent: { type: Type.ARRAY, items: { type: Type.OBJECT } },
-                            funnyVoiceNotes: { type: Type.ARRAY, items: { type: Type.OBJECT } },
-                            newTalent: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+                            trending: { type: Type.ARRAY, items: postSchemaProperties },
+                            forYou: { type: Type.ARRAY, items: postSchemaProperties },
+                            recent: { type: Type.ARRAY, items: postSchemaProperties },
+                            funnyVoiceNotes: { type: Type.ARRAY, items: postSchemaProperties },
+                            newTalent: { type: Type.ARRAY, items: postSchemaProperties },
                         },
                         required: ['trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent']
                     }

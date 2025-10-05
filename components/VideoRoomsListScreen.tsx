@@ -52,13 +52,14 @@ const VideoRoomsListScreen: React.FC<{ currentUser: User; onNavigate: (view: App
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
+    if (!currentUser) return; // Guard against running before user is loaded
     setIsLoading(true);
     const unsubscribe = geminiService.listenToLiveVideoRooms((liveRooms) => {
       setRooms(liveRooms);
       setIsLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]); // Add currentUser as a dependency
   
   const handleJoinRoom = (roomId: string) => {
     onNavigate(AppView.LIVE_VIDEO_ROOM, { roomId });

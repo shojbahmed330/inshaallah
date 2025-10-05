@@ -1916,6 +1916,7 @@ export const firebaseService = {
             return snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
+                // BUG FIX: Ensure createdAt is converted from Timestamp
                 createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt
             } as Report));
         } catch (error) {
@@ -2281,18 +2282,28 @@ export const firebaseService = {
     },
 
     listenToLiveAudioRooms(callback: (rooms: LiveAudioRoom[]) => void): () => void {
-        const q = query(collection(db, 'liveAudioRooms'), where('status', '==', 'live'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'liveAudioRooms'));
         return onSnapshot(q, (snapshot) => {
-            const rooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveAudioRoom));
+            const rooms = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt } as LiveAudioRoom))
+                .filter(room => room.status === 'live')
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             callback(rooms);
+        }, (error) => {
+            console.error("Error listening to live audio rooms:", error);
         });
     },
 
     listenToLiveVideoRooms(callback: (rooms: LiveVideoRoom[]) => void): () => void {
-        const q = query(collection(db, 'liveVideoRooms'), where('status', '==', 'live'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'liveVideoRooms'));
         return onSnapshot(q, (snapshot) => {
-            const rooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveVideoRoom));
+            const rooms = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data(), createdAt: doc.data().createdAt?.toDate ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt } as LiveVideoRoom))
+                .filter(room => room.status === 'live')
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             callback(rooms);
+        }, (error) => {
+            console.error("Error listening to live video rooms:", error);
         });
     },
 
