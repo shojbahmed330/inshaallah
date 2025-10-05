@@ -47,6 +47,7 @@ import ChatManager from './components/ChatManager';
 import IncomingCallModal from './components/IncomingCallModal';
 import CallScreen from './components/CallScreen';
 import CommentSheet from './components/CommentSheet';
+import ReportModal from './components/ReportModal';
 
 
 interface ViewState {
@@ -176,6 +177,8 @@ const UserApp: React.FC = () => {
   const [leadFormPost, setLeadFormPost] = useState<Post | null>(null);
   const [viewerPost, setViewerPost] = useState<Post | null>(null);
   const [isLoadingViewerPost, setIsLoadingViewerPost] = useState(false);
+  const [hiddenPostIds, setHiddenPostIds] = useState(new Set<string>());
+  const [reportModalContent, setReportModalContent] = useState<{ content: Post | Comment | User; contentType: 'post' | 'comment' | 'user' } | null>(null);
   const { language } = useSettings();
 
   const [activeChats, setActiveChats] = useState<User[]>([]);
@@ -332,6 +335,56 @@ const UserApp: React.FC = () => {
     }
   }, []);
   
+    const handleHidePost = (postId: string) => {
+        setHiddenPostIds(prev => new Set(prev).add(postId));
+        setTtsMessage("Post hidden. It will not be shown again during this session.");
+    };
+
+    const handleSavePost = async (post: Post, isSaving: boolean) => {
+        if (!user) return;
+        const success = isSaving
+            ? await geminiService.savePost(user.id, post.id)
+            : await geminiService.unsavePost(user.id, post.id);
+        
+        if (success) {
+            setTtsMessage(isSaving ? "Post saved." : "Post unsaved.");
+        } else {
+            setTtsMessage("Could not save post. Please try again.");
+        }
+    };
+
+    const handleCopyLink = (post: Post) => {
+        const postUrl = `${window.location.origin}${window.location.pathname}#/post/${post.id}`;
+        navigator.clipboard.writeText(postUrl).then(() => {
+            setTtsMessage("Link copied to clipboard!");
+        }).catch(() => {
+            setTtsMessage("Failed to copy link.");
+        });
+    };
+
+    const handleReportPost = (post: Post) => {
+        setReportModalContent({ content: post, contentType: 'post' });
+        setTtsMessage("Please state the reason for reporting this post.");
+    };
+
+    const handleReportComment = (comment: Comment) => {
+        setReportModalContent({ content: comment, contentType: 'comment' });
+        setTtsMessage("Please state the reason for reporting this comment.");
+    };
+
+    const handleSubmitReport = async (reason: string) => {
+        if (!reportModalContent || !user) return;
+        
+        const success = await geminiService.createReport(user, reportModalContent.content, reportModalContent.contentType, reason);
+
+        if (success) {
+            setTtsMessage("Thank you for your report. We will review it shortly.");
+        } else {
+            setTtsMessage("Sorry, there was an error submitting your report.");
+        }
+        setReportModalContent(null);
+    };
+
   useEffect(() => {
       const handleBeforeUnload = () => {
           const currentUserForUnload = userRef.current;
@@ -1012,9 +1065,9 @@ const UserApp: React.FC = () => {
             initialAuthError={globalAuthError}
         />;
       case AppView.FEED:
-        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} />;
+        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} onReportPost={handleReportPost} hiddenPostIds={hiddenPostIds} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} />;
       case AppView.EXPLORE:
-        return <ExploreScreen {...commonScreenProps} onReactToPost={handleReactToPost} onDeletePost={handleDeletePost} />;
+        return <ExploreScreen {...commonScreenProps} onReactToPost={handleReactToPost} onDeletePost={handleDeletePost} onReportPost={handleReportPost} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} />;
       case AppView.REELS:
         return <ReelsScreen {...commonScreenProps} isLoading={isLoadingReels} posts={reelsPosts} onReactToPost={handleReactToPost} />;
       case AppView.CREATE_POST:
@@ -1022,11 +1075,11 @@ const UserApp: React.FC = () => {
       case AppView.CREATE_REEL:
         return <CreateReelScreen {...commonScreenProps} onReelCreated={handleReelCreated} />;
       case AppView.PROFILE:
-        return <ProfileScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} onEditProfile={handleEditProfile} onBlockUser={handleBlockUser} onCurrentUserUpdate={handleCurrentUserUpdate} onPostCreated={handlePostCreated} onDeletePost={handleDeletePost} {...currentView.props} />;
+        return <ProfileScreen {...commonScreenProps} onOpenConversation={handleOpenConversation} onEditProfile={handleEditProfile} onBlockUser={handleBlockUser} onCurrentUserUpdate={handleCurrentUserUpdate} onPostCreated={handlePostCreated} onDeletePost={handleDeletePost} onReportPost={handleReportPost} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} {...currentView.props} />;
       case AppView.SETTINGS:
         return <SettingsScreen {...commonScreenProps} onUpdateSettings={handleUpdateSettings} onUnblockUser={handleUnblockUser} onDeactivateAccount={handleDeactivateAccount} />;
       case AppView.POST_DETAILS:
-        return <PostDetailScreen {...commonScreenProps} onReactToPost={handleReactToPost} onReactToComment={handleReactToComment} onPostComment={handlePostComment} onEditComment={handleEditComment} onDeleteComment={handleDeleteComment} onDeletePost={handleDeletePost} {...currentView.props} />;
+        return <PostDetailScreen {...commonScreenProps} onReactToPost={handleReactToPost} onReactToComment={handleReactToComment} onPostComment={handlePostComment} onEditComment={handleEditComment} onDeleteComment={handleDeleteComment} onDeletePost={handleDeletePost} onReportPost={handleReportPost} onReportComment={handleReportComment} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} {...currentView.props} />;
       case AppView.FRIENDS:
         return <FriendsScreen {...commonScreenProps} requests={friendRequests} friends={friends} onOpenConversation={handleOpenConversation} {...currentView.props} />;
       case AppView.SEARCH_RESULTS:
@@ -1048,7 +1101,7 @@ const UserApp: React.FC = () => {
       case AppView.GROUPS_HUB:
         return <GroupsHubScreen {...commonScreenProps} groups={groups} onGroupCreated={handleGroupCreated} />;
       case AppView.GROUP_PAGE:
-        return <GroupPageScreen {...commonScreenProps} onStartCreatePost={handleStartCreatePost} {...currentView.props} />;
+        return <GroupPageScreen {...commonScreenProps} onStartCreatePost={handleStartCreatePost} onDeletePost={handleDeletePost} onReportPost={handleReportPost} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} {...currentView.props} />;
       case AppView.MANAGE_GROUP:
         return <ManageGroupScreen {...commonScreenProps} {...currentView.props} />;
       case AppView.GROUP_CHAT:
@@ -1070,7 +1123,7 @@ const UserApp: React.FC = () => {
       case AppView.MOBILE_MENU:
         return <MobileMenuScreen currentUser={user} onNavigate={navigate} onLogout={handleLogout} friendRequestCount={friendRequestCount} />;
       default:
-        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} />;
+        return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} onReportPost={handleReportPost} hiddenPostIds={hiddenPostIds} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} />;
     }
   };
   
@@ -1261,6 +1314,8 @@ const UserApp: React.FC = () => {
             onOpenProfile={handleOpenProfile} 
             onSharePost={handleSharePost}
             onOpenCommentsSheet={handleOpenComments}
+            onReportPost={handleReportPost}
+            onReportComment={handleReportComment}
          />
       )}
        {incomingCall && (
@@ -1269,6 +1324,14 @@ const UserApp: React.FC = () => {
               onAccept={handleAcceptCall}
               onReject={handleRejectCall}
           />
+      )}
+      {reportModalContent && (
+        <ReportModal
+            content={reportModalContent.content}
+            contentType={reportModalContent.contentType}
+            onClose={() => setReportModalContent(null)}
+            onSubmit={handleSubmitReport}
+        />
       )}
       {commentSheetState && (
         <CommentSheet
@@ -1285,6 +1348,8 @@ const UserApp: React.FC = () => {
             onOpenProfile={handleOpenProfile}
             onSharePost={handleSharePost}
             onOpenPhotoViewer={handleOpenPhotoViewer}
+            onReportPost={handleReportPost}
+            onReportComment={handleReportComment}
         />
       )}
       {!isFullScreenView && (

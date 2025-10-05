@@ -115,10 +115,7 @@ const TrendingSection: React.FC<{
 
 
 const ExploreScreen: React.FC<ExploreScreenProps> = (props) => {
-    const {
-      currentUser,
-      ...restOfProps
-    } = props;
+    const { currentUser, ...restOfProps } = props;
 
     const [categorizedFeed, setCategorizedFeed] = useState<CategorizedExploreFeed | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -127,7 +124,6 @@ const ExploreScreen: React.FC<ExploreScreenProps> = (props) => {
     const isMobile = useIsMobile();
 
     // Mobile-specific state
-    // FIX: Correcting the type definition for 'activeTabKey' to ensure it's a valid key of CategorizedExploreFeed, resolving type errors.
     const [activeTabKey, setActiveTabKey] = useState<keyof CategorizedExploreFeed>('forYou');
     const [isRefreshing, setIsRefreshing] = useState(false);
     const touchStartRef = useRef(0);
@@ -278,7 +274,6 @@ const ExploreScreen: React.FC<ExploreScreenProps> = (props) => {
                                     <button 
                                         key={post.id} 
                                         className="masonry-item relative group"
-                                        // FIX: Replaced direct call to 'onOpenPhotoViewer' with 'props.onOpenPhotoViewer' to correctly access the prop passed to the component.
                                         onClick={() => props.onOpenPhotoViewer(post, previewUrl)}
                                     >
                                         <img src={previewUrl} alt={post.caption} />
@@ -304,7 +299,6 @@ const ExploreScreen: React.FC<ExploreScreenProps> = (props) => {
         return <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center text-red-400"><Icon name="close" className="w-16 h-16" /><h2 className="text-2xl font-bold">An Error Occurred</h2><p>{error}</p></div>;
     }
 
-    // FIX: `Object.values(categorizedFeed)` might throw error if `categorizedFeed` is null.
     const isEmpty = !isLoading && (!categorizedFeed || Object.values(categorizedFeed).every(arr => Array.isArray(arr) && arr.length === 0));
 
     if (isEmpty) {

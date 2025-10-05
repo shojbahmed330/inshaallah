@@ -63,7 +63,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
   currentPostIndexRef.current = currentPostIndex;
 
   const visiblePosts = useMemo(() => {
-    return posts.filter(p => !hiddenPostIds.has(p.id));
+    return posts.filter(p => p && !hiddenPostIds.has(p.id));
   }, [posts, hiddenPostIds]);
 
   useEffect(() => {
@@ -270,15 +270,12 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
             }
             break;
           case 'intent_scroll_down':
-              // FIX: Use the ScrollState enum member instead of a string literal.
               onSetScrollState(ScrollState.DOWN);
               break;
           case 'intent_scroll_up':
-              // FIX: Use the ScrollState enum member instead of a string literal.
               onSetScrollState(ScrollState.UP);
               break;
           case 'intent_stop_scroll':
-              // FIX: Use the ScrollState enum member instead of a string literal.
               onSetScrollState(ScrollState.NONE);
               break;
           case 'intent_help':

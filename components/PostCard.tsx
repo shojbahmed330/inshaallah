@@ -27,6 +27,10 @@ interface PostCardProps {
   onPinPost?: (postId: string) => void;
   onUnpinPost?: (postId: string) => void;
   onVote?: (postId: string, optionIndex: number) => void;
+  isSaved?: boolean;
+  onSavePost?: (post: Post, isSaving: boolean) => void;
+  onCopyLink?: (post: Post) => void;
+  onHidePost?: (postId: string) => void;
 }
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
@@ -107,8 +111,7 @@ const ImageGridRenderer: React.FC<{
     }
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onOpenComments, onAuthorClick, onSharePost, onAdClick, onDeletePost, onReportPost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote }) => {
-  // FINAL FIX: Add a guard clause for the post and its author.
+export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive, isPlaying, onPlayPause, onReact, onOpenComments, onAuthorClick, onSharePost, onAdClick, onDeletePost, onReportPost, onOpenPhotoViewer, groupRole, isGroupAdmin, isPinned, onPinPost, onUnpinPost, onVote, isSaved, onSavePost, onCopyLink, onHidePost }) => {
   if (!post || !post.author) {
     return null;
   }
@@ -270,6 +273,24 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
     if (onReportPost) {
         onReportPost(post);
     }
+  };
+
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onSavePost?.(post, !isSaved);
+  };
+ 
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onCopyLink?.(post);
+  };
+ 
+  const handleHide = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMenuOpen(false);
+    onHidePost?.(post.id);
   };
 
   const handlePin = (e: React.MouseEvent) => {
@@ -484,17 +505,22 @@ export const PostCard: React.FC<PostCardProps> = ({ post, currentUser, isActive,
                 <Icon name="ellipsis-vertical" className="w-5 h-5"/>
               </button>
               {isMenuOpen && (
-                <div className="absolute top-full right-0 mt-1 w-40 bg-black border border-fuchsia-500/20 rounded-lg shadow-xl z-10 text-sm font-semibold">
-                  <ul>
-                   {isGroupAdmin && (
-                      <li><button onClick={handlePin} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">{isPinned ? 'Unpin Post' : 'Pin Post'}</button></li>
-                   )}
-                   {isAuthor && onDeletePost && (
-                       <li><button onClick={handleDelete} className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10">Delete Post</button></li>
-                   )}
-                   {!isAuthor && onReportPost && (
-                        <li><button onClick={handleReport} className="w-full text-left px-4 py-2 text-yellow-400 hover:bg-yellow-500/10">Report Post</button></li>
-                   )}
+                <div className="absolute top-full right-0 mt-1 w-48 bg-black border border-fuchsia-500/20 rounded-lg shadow-xl z-10 text-sm font-semibold">
+                  <ul className="py-1">
+                    {isAuthor || isGroupAdmin ? (
+                      <>
+                        {isGroupAdmin && <li><button onClick={handlePin} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">{isPinned ? 'Unpin Post' : 'Pin Post'}</button></li>}
+                        {isAuthor && onDeletePost && <li><button onClick={handleDelete} className="w-full text-left px-4 py-2 text-red-400 hover:bg-red-500/10">Delete Post</button></li>}
+                      </>
+                    ) : (
+                      <>
+                        <li><button onClick={handleReport} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-yellow-400">Report post</button></li>
+                        <div className="my-1 h-px bg-slate-700"></div>
+                        <li><button onClick={handleSave} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">{isSaved ? 'Unsave post' : 'Save post'}</button></li>
+                        <li><button onClick={handleCopy} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">Copy link</button></li>
+                        <li><button onClick={handleHide} className="w-full text-left px-4 py-2 hover:bg-slate-800 text-fuchsia-300">Hide post</button></li>
+                      </>
+                    )}
                   </ul>
                 </div>
               )}
