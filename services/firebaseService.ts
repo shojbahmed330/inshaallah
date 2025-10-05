@@ -519,7 +519,7 @@ export const firebaseService = {
         try {
             const batch = writeBatch(db);
             batch.update(currentUserRef, { friendIds: arrayRemove(targetUserId) });
-            batch.update(targetUserRef, { friendIds: arrayRemove(currentUserId) });
+            batch.update(targetUserRef, { friendIds: arrayRemove(targetUserId) });
             await batch.commit();
             return true;
         } catch (error) {
@@ -1848,7 +1848,12 @@ export const firebaseService = {
         return snapshot.docs.map(docToUser);
     },
     updateUserRole: async (userId, newRole) => true,
-    getPendingCampaigns: async () => [],
+    getPendingCampaigns: async () => {
+        const campaignsRef = collection(db, 'campaigns');
+        const q = query(campaignsRef, where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Campaign));
+    },
     approveCampaign: async (campaignId) => {
         const campaignRef = doc(db, 'campaigns', campaignId);
         const campaignDoc = await getDoc(campaignRef);
@@ -2127,7 +2132,6 @@ export const firebaseService = {
             return null;
         }
     },
-// @FIX: Add missing call, ads, and lead generation functions.
     // --- 1-on-1 Calls ---
     async createCall(caller: Author, callee: User, chatId: string, type: 'audio' | 'video'): Promise<string> {
         const callRef = collection(db, 'calls');
@@ -2189,236 +2193,214 @@ export const firebaseService = {
     },
 
     // --- Ads & Campaigns ---
+    async getRandomActiveCampaign(): Promise<Campaign | null> {
+        const campaignsRef = collection(db, 'campaigns');
+        const q = query(campaignsRef, where('status', '==', 'active'));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) return null;
+        
+        const eligibleCampaigns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Campaign)).filter(c => {
+            const costSoFar = (c.views / 1000) * SPONSOR_CPM_BDT;
+            return c.budget > costSoFar;
+        });
+
+        if (eligibleCampaigns.length === 0) return null;
+        return eligibleCampaigns[Math.floor(Math.random() * eligibleCampaigns.length)];
+    },
+
+    async getStories(currentUserId: string): Promise<{ author: User; stories: Story[]; allViewed: boolean }[]> {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const currentUser = await this.getUserProfileById(currentUserId);
+        if (!currentUser) return [];
+    
+        const userIdsToFetch = [currentUserId, ...(currentUser.friendIds || [])];
+        if (userIdsToFetch.length === 0) return [];
+        
+        const storiesRef = collection(db, 'stories');
+        const q = query(storiesRef, where('author.id', 'in', userIdsToFetch), where('createdAt', '>=', twentyFourHoursAgo.toISOString()));
+        
+        const snapshot = await getDocs(q);
+        const allStories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Story));
+    
+        const storiesByAuthor = new Map<string, { author: User; stories: Story[] }>();
+    
+        allStories.forEach(story => {
+            if (!storiesByAuthor.has(story.author.id)) {
+                storiesByAuthor.set(story.author.id, { author: story.author, stories: [] });
+            }
+            storiesByAuthor.get(story.author.id)!.stories.push(story);
+        });
+        
+        return Array.from(storiesByAuthor.values()).map(group => {
+            group.stories.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            const allViewed = group.stories.every(story => story.viewedBy.includes(currentUserId));
+            return { ...group, allViewed };
+        });
+    },
+
+    listenToLiveAudioRooms(callback: (rooms: LiveAudioRoom[]) => void): () => void {
+        const q = query(collection(db, 'liveAudioRooms'), where('status', '==', 'live'), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const rooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveAudioRoom));
+            callback(rooms);
+        });
+    },
+
+    listenToLiveVideoRooms(callback: (rooms: LiveVideoRoom[]) => void): () => void {
+        const q = query(collection(db, 'liveVideoRooms'), where('status', '==', 'live'), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const rooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveVideoRoom));
+            callback(rooms);
+        });
+    },
+
+    async getSuggestedGroups(userId: string): Promise<Group[]> {
+        const user = await this.getUserProfileById(userId);
+        const myGroupIds = user?.groupIds || [];
+    
+        const groupsRef = collection(db, 'groups');
+        const q = query(groupsRef, where('privacy', '==', 'public'), limit(20));
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Group))
+            .filter(group => !myGroupIds.includes(group.id));
+    },
+
+    async leaveGroup(userId: string, groupId: string): Promise<boolean> {
+        const groupRef = doc(db, 'groups', groupId);
+        const userRef = doc(db, 'users', userId);
+        try {
+            const user = await this.getUserProfileById(userId);
+            if (!user) return false;
+            const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
+            await updateDoc(groupRef, {
+                members: arrayRemove(memberObject),
+                memberIds: arrayRemove(userId),
+                memberCount: increment(-1),
+                admins: arrayRemove(memberObject),
+                moderators: arrayRemove(memberObject),
+            });
+            await updateDoc(userRef, { groupIds: arrayRemove(groupId) });
+            return true;
+        } catch (error) {
+            console.error("Error leaving group:", error);
+            return false;
+        }
+    },
+    // FIX: Add missing functions
+    listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
+        const groupsRef = collection(db, 'groups');
+        const q = query(groupsRef, where('memberIds', 'array-contains', userId));
+        return onSnapshot(q, (snapshot) => {
+            const groups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Group));
+            callback(groups);
+        }, (error) => {
+            console.error("Error listening to user groups:", error);
+            callback([]);
+        });
+    },
     async trackAdView(campaignId: string): Promise<void> {
         const campaignRef = doc(db, 'campaigns', campaignId);
-        await updateDoc(campaignRef, { views: increment(1) });
+        await updateDoc(campaignRef, {
+            views: increment(1)
+        });
     },
-
     async trackAdClick(campaignId: string): Promise<void> {
         const campaignRef = doc(db, 'campaigns', campaignId);
-        await updateDoc(campaignRef, { clicks: increment(1) });
+        await updateDoc(campaignRef, {
+            clicks: increment(1)
+        });
     },
-    
     async submitLead(leadData: Omit<Lead, 'id'>): Promise<void> {
-        await addDoc(collection(db, 'leads'), leadData);
+        const leadsRef = collection(db, 'leads');
+        await addDoc(leadsRef, {
+            ...leadData,
+            createdAt: serverTimestamp(),
+        });
     },
-
     async getLeadsForCampaign(campaignId: string): Promise<Lead[]> {
         const leadsRef = collection(db, 'leads');
         const q = query(leadsRef, where('campaignId', '==', campaignId), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+        return snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate().toISOString() : doc.data().createdAt,
+        } as Lead));
     },
-
     async getInjectableAd(currentUser: User): Promise<Post | null> {
         const campaignsRef = collection(db, 'campaigns');
         const q = query(campaignsRef, where('status', '==', 'active'), where('adType', '==', 'feed'));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
 
-        const allActiveCampaigns = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Campaign));
-        const eligibleCampaigns = allActiveCampaigns.filter(c => {
-            const costSoFar = (c.views / 1000) * SPONSOR_CPM_BDT;
-            return c.budget > costSoFar && matchesTargeting(c, currentUser);
-        });
+        const eligibleCampaigns = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Campaign))
+            .filter(c => {
+                const costSoFar = (c.views / 1000) * SPONSOR_CPM_BDT;
+                return c.budget > costSoFar && matchesTargeting(c, currentUser);
+            });
 
         if (eligibleCampaigns.length === 0) return null;
-        const randomCampaign = eligibleCampaigns[Math.floor(Math.random() * eligibleCampaigns.length)];
-        
-        const sponsorProfile = await firebaseService.getUserProfileById(randomCampaign.sponsorId);
-        if(!sponsorProfile) return null;
+        const campaign = eligibleCampaigns[Math.floor(Math.random() * eligibleCampaigns.length)];
+        const sponsor = await this.getUserProfileById(campaign.sponsorId);
 
         return {
-            id: `ad_${randomCampaign.id}`,
-            author: { id: sponsorProfile.id, name: sponsorProfile.name, username: sponsorProfile.username, avatarUrl: sponsorProfile.avatarUrl },
-            isSponsored: true,
-            sponsorName: randomCampaign.sponsorName,
-            campaignId: randomCampaign.id,
-            sponsorId: randomCampaign.sponsorId,
-            caption: randomCampaign.caption,
-            imageUrl: randomCampaign.imageUrl,
-            videoUrl: randomCampaign.videoUrl,
-            audioUrl: randomCampaign.audioUrl,
-            websiteUrl: randomCampaign.websiteUrl,
-            allowDirectMessage: randomCampaign.allowDirectMessage,
-            allowLeadForm: randomCampaign.allowLeadForm,
+            id: `ad_${campaign.id}`,
+            author: sponsor ? { id: sponsor.id, name: sponsor.name, username: sponsor.username, avatarUrl: sponsor.avatarUrl } : { id: 'ad', name: 'Sponsored', username: 'sponsored', avatarUrl: '' },
+            caption: campaign.caption,
             createdAt: new Date().toISOString(),
+            imageUrl: campaign.imageUrl,
+            videoUrl: campaign.videoUrl,
+            audioUrl: campaign.audioUrl,
+            duration: 0,
             reactions: {},
             commentCount: 0,
             comments: [],
-            duration: 0,
+            isSponsored: true,
+            sponsorName: campaign.sponsorName,
+            campaignId: campaign.id,
+            sponsorId: campaign.sponsorId,
+            websiteUrl: campaign.websiteUrl,
+            allowDirectMessage: campaign.allowDirectMessage,
+            allowLeadForm: campaign.allowLeadForm,
         };
     },
-    
     async getInjectableStoryAd(currentUser: User): Promise<Story | null> {
         const campaignsRef = collection(db, 'campaigns');
         const q = query(campaignsRef, where('status', '==', 'active'), where('adType', '==', 'story'));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
 
-        const allActiveCampaigns = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Campaign));
-        const eligibleCampaigns = allActiveCampaigns.filter(c => {
-            const costSoFar = (c.views / 1000) * SPONSOR_CPM_BDT;
-            return c.budget > costSoFar && matchesTargeting(c, currentUser);
-        });
+        const eligibleCampaigns = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Campaign))
+            .filter(c => {
+                const costSoFar = (c.views / 1000) * SPONSOR_CPM_BDT;
+                return c.budget > costSoFar && matchesTargeting(c, currentUser);
+            });
 
         if (eligibleCampaigns.length === 0) return null;
-        const randomCampaign = eligibleCampaigns[Math.floor(Math.random() * eligibleCampaigns.length)];
+        const campaign = eligibleCampaigns[Math.floor(Math.random() * eligibleCampaigns.length)];
+        const sponsor = await this.getUserProfileById(campaign.sponsorId);
         
-        const sponsorProfile = await firebaseService.getUserProfileById(randomCampaign.sponsorId);
-        if(!sponsorProfile) return null;
+        const mediaUrl = campaign.imageUrl || campaign.videoUrl;
+        if (!mediaUrl) return null;
 
         return {
-            id: `ad_story_${randomCampaign.id}`,
-            author: sponsorProfile,
-            isSponsored: true,
-            sponsorName: randomCampaign.sponsorName,
-            sponsorAvatar: sponsorProfile.avatarUrl,
-            campaignId: randomCampaign.id,
-            ctaLink: randomCampaign.websiteUrl,
-            contentUrl: randomCampaign.imageUrl || randomCampaign.videoUrl,
-            type: randomCampaign.videoUrl ? 'video' : 'image',
-            createdAt: new Date().toISOString(),
+            id: `ad_story_${campaign.id}`,
+            author: sponsor || { id: campaign.sponsorId, name: campaign.sponsorName, username: 'sponsor', avatarUrl: '' } as User,
+            type: campaign.videoUrl ? 'video' : 'image',
+            contentUrl: mediaUrl,
             duration: 15,
+            createdAt: new Date().toISOString(),
             viewedBy: [],
             privacy: 'public',
+            isSponsored: true,
+            sponsorName: campaign.sponsorName,
+            sponsorAvatar: sponsor?.avatarUrl,
+            campaignId: campaign.id,
+            ctaLink: campaign.websiteUrl,
         };
-    },
-    listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
-        let groupsUnsubscribe = () => {};
-        const userUnsubscribe = onSnapshot(doc(db, 'users', userId), (userDoc) => {
-            groupsUnsubscribe(); // Cleanup previous groups listener
-    
-            if (userDoc.exists()) {
-                const groupIds = userDoc.data().groupIds || [];
-                if (groupIds.length > 0) {
-                    const q = query(collection(db, 'groups'), where(documentId(), 'in', groupIds));
-                    groupsUnsubscribe = onSnapshot(q, (groupsSnapshot) => {
-                        const groups = groupsSnapshot.docs.map(d => {
-                            const data = d.data();
-                            return {
-                                id: d.id,
-                                ...data,
-                                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-                            } as Group;
-                        });
-                        callback(groups);
-                    }, (error) => {
-                        console.warn("Could not fetch user's groups by ID list due to permissions.", error.message);
-                        callback([]);
-                    });
-                } else {
-                    callback([]); // User is in no groups
-                }
-            } else {
-                callback([]); // User document doesn't exist
-            }
-        }, (error) => {
-            console.warn("Could not fetch user's groups due to permissions or data inconsistency.", error.message);
-            callback([]);
-        });
-    
-        // Return a function that unsubscribes from both listeners
-        return () => {
-            userUnsubscribe();
-            groupsUnsubscribe();
-        };
-    },
-
-    listenToGroup(groupId: string, callback: (group: Group | null) => void): () => void {
-        const groupRef = doc(db, 'groups', groupId);
-        return onSnapshot(groupRef, (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                callback({
-                    id: doc.id,
-                    ...data,
-                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-                } as Group);
-            } else {
-                callback(null);
-            }
-        }, (error) => {
-            console.error(`Error listening to group ${groupId}:`, error);
-            callback(null);
-        });
-    },
-
-    listenToPostsForGroup(groupId: string, callback: (posts: Post[]) => void): () => void {
-        const postsRef = collection(db, 'posts');
-        const q = query(postsRef, where('groupId', '==', groupId), where('status', '==', 'approved'), orderBy('createdAt', 'desc'));
-        return onSnapshot(q, (snapshot) => {
-            const posts = snapshot.docs.map(docToPost);
-            callback(posts);
-        }, (error) => {
-            console.error(`Error listening to posts for group ${groupId}:`, error);
-            callback([]); // Return empty array on error
-        });
-    },
-
-    listenToGroupChat(groupId: string, callback: (chat: GroupChat | null) => void): () => void {
-        const chatRef = doc(db, 'groupChats', groupId);
-        return onSnapshot(chatRef, (doc) => {
-            if (doc.exists()) {
-                const data = doc.data();
-                callback({
-                    groupId: doc.id,
-                    messages: (data.messages || []).map((msg: any) => ({
-                        ...msg,
-                        createdAt: msg.createdAt instanceof Timestamp ? msg.createdAt.toDate().toISOString() : msg.createdAt,
-                    })),
-                } as GroupChat);
-            } else {
-                console.log(`Group chat for ${groupId} not found, creating it.`);
-                setDoc(chatRef, { messages: [] })
-                    .then(() => {
-                         callback({ groupId, messages: [] });
-                    })
-                    .catch(err => {
-                        console.error("Failed to auto-create group chat:", err);
-                        callback(null);
-                    });
-            }
-        }, (error) => {
-            console.error(`Error listening to group chat ${groupId}:`, error);
-            callback(null);
-        });
-    },
-    
-    async reactToGroupChatMessage(groupId: string, messageId: string, userId: string, emoji: string): Promise<void> {
-        const chatRef = doc(db, 'groupChats', groupId);
-        await runTransaction(db, async (transaction) => {
-            const chatDoc = await transaction.get(chatRef);
-            if (!chatDoc.exists()) throw "Chat does not exist!";
-            const messages = chatDoc.data().messages || [];
-            const msgIndex = messages.findIndex((m: any) => m.id === messageId);
-            if (msgIndex === -1) throw "Message not found!";
-    
-            const message = messages[msgIndex];
-            const reactions = message.reactions || {};
-            const previousReaction = Object.keys(reactions).find(key => reactions[key].includes(userId));
-    
-            if (previousReaction) {
-                reactions[previousReaction] = reactions[previousReaction].filter((id: string) => id !== userId);
-            }
-    
-            if (previousReaction !== emoji) {
-                if (!reactions[emoji]) {
-                    reactions[emoji] = [];
-                }
-                reactions[emoji].push(userId);
-            }
-            
-            for (const key in reactions) {
-                if (reactions[key].length === 0) {
-                    delete reactions[key];
-                }
-            }
-            
-            message.reactions = reactions;
-            messages[msgIndex] = message;
-    
-            transaction.update(chatRef, { messages });
-        });
     },
 };
