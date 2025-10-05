@@ -154,10 +154,11 @@ const postSchemaProperties = {
         createdAt: { type: Type.STRING },
         reactions: {
             type: Type.OBJECT,
+            description: "An object where keys are dynamic user IDs and values are their emoji reaction strings (e.g., '❤️').",
             properties: {
-                "placeholder_user_id": {
+                "example_user_id": {
                     type: Type.STRING,
-                    description: "This field is a placeholder. The actual object contains user IDs as keys and their emoji reactions as string values."
+                    description: "An example emoji reaction string."
                 }
             }
         },
