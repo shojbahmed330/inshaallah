@@ -152,18 +152,7 @@ const postSchemaProperties = {
         },
         caption: { type: Type.STRING },
         createdAt: { type: Type.STRING },
-        reactions: {
-            type: Type.OBJECT,
-            description: "An object representing user reactions. Keys are dynamic user IDs (strings), and values are emoji strings.",
-            // The Gemini API requires a non-empty properties object for Type.OBJECT.
-            // This acts as a placeholder to define the structure for an object with dynamic keys.
-            properties: {
-                "placeholder_user_id": {
-                    type: Type.STRING,
-                    description: "This is a placeholder for a dynamic user ID. The actual key will be a user's unique ID. The value will be an emoji string like '👍' or '❤️'."
-                }
-            }
-        },
+        reactionCount: { type: Type.NUMBER },
         commentCount: { type: Type.NUMBER },
         imageUrl: { type: Type.STRING },
         videoUrl: { type: Type.STRING },
@@ -554,20 +543,25 @@ export const geminiService = {
             return { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
         }
 
-        // Create a map for easy lookup after getting the categorized response
         const postsById = new Map(posts.map(p => [p.id, p]));
-        // Create lightweight posts without the 'comments' array to reduce prompt size
-        const lightweightPosts = posts.map(({ comments, ...rest }) => rest);
+        
+        const lightweightPosts = posts.map(p => {
+            const { comments, reactions, ...rest } = p;
+            return {
+                ...rest,
+                reactionCount: Object.keys(reactions || {}).length,
+            };
+        });
 
         const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. 
         
         CRITICAL INSTRUCTIONS FOR 'forYou' CATEGORY:
         1.  Create a diverse and engaging feed. It should be a MIX of content types: image posts, short videos (posts with a 'videoUrl'), and interesting audio notes.
         2.  AVOID showing too many posts with a postType of 'profile_picture_change' or 'cover_photo_change'. Do not let these dominate the feed. Prefer posts with original content.
-        3.  Prioritize content that is visually appealing or has good engagement (reactions, comments) but is different from the main 'trending' category.
+        3.  Prioritize content that is visually appealing or has good engagement (reactionCount, commentCount) but is different from the main 'trending' category.
 
         General Rules:
-        - 'trending' should be based on high engagement (reactions/comments).
+        - 'trending' should be based on high engagement (reactionCount/commentCount).
         - 'recent' are the 5-10 most recent posts based on their 'createdAt' timestamp.
         - 'funnyVoiceNotes' are audio posts that seem humorous from their caption.
         - 'newTalent' are posts from newer users or with unique content.`;
@@ -596,7 +590,6 @@ export const geminiService = {
             const jsonString = response.text.trim();
             const categorizedLightweightFeed = JSON.parse(jsonString);
 
-            // Rehydrate the feed with the full post objects using the map
             const rehydratedFeed: CategorizedExploreFeed = { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
             for (const category of Object.keys(rehydratedFeed)) {
                 if (categorizedLightweightFeed[category]) {
