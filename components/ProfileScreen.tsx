@@ -72,12 +72,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 }) => {
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   const [friendsList, setFriendsList] = useState<User[]>([]);
   const [commonFriends, setCommonFriends] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>(FriendshipStatus.NOT_FRIENDS);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
-  const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'friends'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'friends' | 'saved'>('posts');
   
   const [currentPostIndex, setCurrentPostIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -100,6 +102,29 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [isRequestMenuOpen, setIsRequestMenuOpen] = useState(false);
   const requestMenuRef = useRef<HTMLDivElement>(null);
+
+  const isOwnProfile = profileUser?.id === currentUser.id;
+
+  useEffect(() => {
+    if (activeTab === 'saved' && isOwnProfile) {
+        const fetchSavedPosts = async () => {
+            if (currentUser.savedPostIds && currentUser.savedPostIds.length > 0) {
+                setIsLoadingSaved(true);
+                const fetchedPosts = await geminiService.getPostsByIds(currentUser.savedPostIds);
+                const postsById = new Map(fetchedPosts.map(p => [p.id, p]));
+                const sortedSavedPosts = currentUser.savedPostIds
+                    .map(id => postsById.get(id))
+                    .filter((p): p is Post => !!p);
+
+                setSavedPosts(sortedSavedPosts);
+                setIsLoadingSaved(false);
+            } else {
+                setSavedPosts([]);
+            }
+        };
+        fetchSavedPosts();
+    }
+  }, [activeTab, isOwnProfile, currentUser.savedPostIds]);
 
 
   useEffect(() => {
@@ -432,9 +457,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   if (!profileUser) {
     return <div className="flex items-center justify-center h-full"><p className="text-slate-300 text-xl">User not found.</p></div>;
   }
-
-  const isOwnProfile = profileUser.id === currentUser.id;
-
+  
   const effectiveVisibility = profileUser.privacySettings?.friendListVisibility || 'friends';
   const canViewFriends =
     isOwnProfile ||
@@ -492,7 +515,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   }
 
-  const TabButton: React.FC<{tabId: 'posts' | 'about' | 'friends'; label: string; count?: number}> = ({ tabId, label, count }) => (
+  const TabButton: React.FC<{tabId: 'posts' | 'about' | 'friends' | 'saved'; label: string; count?: number}> = ({ tabId, label, count }) => (
     <button 
         onClick={() => setActiveTab(tabId)}
         className={`px-4 py-3 font-semibold text-lg border-b-4 transition-colors ${activeTab === tabId ? 'border-fuchsia-500 text-fuchsia-300' : 'border-transparent text-fuchsia-500 hover:text-fuchsia-300'}`}
@@ -609,6 +632,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     <TabButton tabId="posts" label="Posts" count={posts.length} />
                     <TabButton tabId="about" label="About" />
                     <TabButton tabId="friends" label="Friends" count={friendsList.length} />
+                    {isOwnProfile && <TabButton tabId="saved" label="Saved" count={currentUser.savedPostIds?.length || 0} />}
                 </div>
                 
                 <div className="p-4">
@@ -682,6 +706,41 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                                 <div className="col-span-full text-center py-12 bg-slate-800 rounded-lg">
                                     <Icon name="lock-closed" className="w-12 h-12 mx-auto text-slate-500 mb-4" />
                                     <p className="font-semibold text-slate-300">{t(language, 'profile.friendsListPrivate')}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                     {activeTab === 'saved' && isOwnProfile && (
+                        <div id="saved-post-list-container" className="max-w-lg mx-auto flex flex-col gap-8">
+                            {isLoadingSaved ? (
+                                <p className="text-slate-400 text-center">Loading saved posts...</p>
+                            ) : savedPosts.length > 0 ? (
+                                savedPosts.map((post) => (
+                                    <div key={post.id} className="w-full snap-center">
+                                        <PostCard 
+                                            post={post} 
+                                            currentUser={currentUser}
+                                            isActive={false}
+                                            isPlaying={false}
+                                            onPlayPause={() => onNavigate(AppView.POST_DETAILS, { postId: post.id })}
+                                            onReact={onReactToPost}
+                                            onOpenComments={onOpenComments}
+                                            onAuthorClick={onOpenProfile}
+                                            onSharePost={onSharePost}
+                                            onOpenPhotoViewer={onOpenPhotoViewer}
+                                            onDeletePost={onDeletePost}
+                                            onReportPost={onReportPost}
+                                            isSaved={true}
+                                            onSavePost={onSavePost}
+                                            onCopyLink={onCopyLink}
+                                            onHidePost={onHidePost}
+                                        />
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="bg-slate-800 p-8 rounded-lg text-center text-slate-400">
+                                    <p>You haven't saved any posts yet.</p>
+                                    <p className="text-sm mt-2">When you save posts, they'll appear here.</p>
                                 </div>
                             )}
                         </div>
