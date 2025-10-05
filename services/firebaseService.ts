@@ -12,7 +12,7 @@ import {
 import { getStorage, ref, uploadBytes, getDownloadURL, uploadString } from 'firebase/storage';
 
 import { db, auth, storage } from './firebaseConfig';
-import { User, Post, Comment, Message, ReplyInfo, Story, Group, Campaign, LiveAudioRoom, LiveVideoRoom, Report, Notification, Lead, Author, AdminUser, FriendshipStatus, ChatSettings, Conversation, Call, LiveAudioRoomMessage, LiveVideoRoomMessage, VideoParticipantState } from '../types';
+import { User, Post, Comment, Message, ReplyInfo, Story, Group, Campaign, LiveAudioRoom, LiveVideoRoom, Report, Notification, Lead, Author, AdminUser, FriendshipStatus, ChatSettings, Conversation, Call, LiveAudioRoomMessage, LiveVideoRoomMessage, VideoParticipantState, GroupChat } from '../types';
 import { DEFAULT_AVATARS, DEFAULT_COVER_PHOTOS, CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET, SPONSOR_CPM_BDT } from '../constants';
 
 
@@ -626,7 +626,7 @@ export const firebaseService = {
             callback(allPosts);
         };
     
-        const addListener = (q, source) => {
+        const addListener = (q: any, source: string) => {
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 let changed = false;
                 snapshot.docs.forEach(doc => {
@@ -1938,7 +1938,7 @@ export const firebaseService = {
         const collectionName = type === 'audio' ? 'liveAudioRooms' : 'liveVideoRooms';
         const roomRef = doc(db, collectionName, roomId);
         const roomDoc = await getDoc(roomRef);
-        return roomDoc.exists() ? { id: doc.id, ...doc.data() } : null;
+        return roomDoc.exists() ? { id: roomDoc.id, ...roomDoc.data() } : null;
     },
     async raiseHandInAudioRoom(userId: string, roomId: string): Promise<void> {
         const roomRef = doc(db, 'liveAudioRooms', roomId);
@@ -2130,10 +2130,10 @@ export const firebaseService = {
         }
     },
 
-    // --- Rooms, Campaigns, Stories, Groups, Admin, etc. (Stubs for brevity) ---
-    listenToLiveAudioRooms: (callback) => onSnapshot(query(collection(db, 'liveAudioRooms'), where('status', '==', 'live')), s => callback(s.docs.map(d => ({id: d.id, ...d.data()})))),
-    listenToLiveVideoRooms: (callback) => onSnapshot(query(collection(db, 'liveVideoRooms'), where('status', '==', 'live')), s => callback(s.docs.map(d => ({id: d.id, ...d.data()})))),
-    createLiveAudioRoom: async (host, topic) => { 
+    // --- Rooms, Campaigns, Stories, Groups, Admin, etc. ---
+    listenToLiveAudioRooms: (callback: (rooms: LiveAudioRoom[]) => void) => onSnapshot(query(collection(db, 'liveAudioRooms'), where('status', '==', 'live')), s => callback(s.docs.map(d => ({id: d.id, ...d.data()} as LiveAudioRoom)))),
+    listenToLiveVideoRooms: (callback: (rooms: LiveVideoRoom[]) => void) => onSnapshot(query(collection(db, 'liveVideoRooms'), where('status', '==', 'live')), s => callback(s.docs.map(d => ({id: d.id, ...d.data()} as LiveVideoRoom)))),
+    createLiveAudioRoom: async (host: User, topic: string) => { 
         try {
             const hostAuthor = { id: host.id, name: host.name, avatarUrl: host.avatarUrl, username: host.username };
             const roomData = {
@@ -2156,7 +2156,7 @@ export const firebaseService = {
             return null;
         }
     },
-    createLiveVideoRoom: async (host, topic) => { 
+    createLiveVideoRoom: async (host: User, topic: string) => { 
         try {
             const hostAuthor = { id: host.id, name: host.name, avatarUrl: host.avatarUrl, username: host.username };
             const roomData = {
@@ -2177,19 +2177,19 @@ export const firebaseService = {
             return null;
         }
     },
-    getCampaignsForSponsor: async (sponsorId) => [],
-    submitCampaignForApproval: async (campaignData, transactionId) => {
+    getCampaignsForSponsor: async (sponsorId: string): Promise<Campaign[]> => [],
+    submitCampaignForApproval: async (campaignData: any, transactionId: string) => {
         const campaignToSave = { ...campaignData, views: 0, clicks: 0, status: 'pending', transactionId };
         await addDoc(collection(db, 'campaigns'), removeUndefined(campaignToSave));
     },
-    getRandomActiveCampaign: async () => null,
-    trackAdView: async (campaignId) => updateDoc(doc(db, 'campaigns', campaignId), { views: increment(1) }),
-    trackAdClick: async (campaignId) => updateDoc(doc(db, 'campaigns', campaignId), { clicks: increment(1) }),
-    submitLead: async (leadData) => addDoc(collection(db, 'leads'), { ...leadData, createdAt: serverTimestamp() }),
-    getLeadsForCampaign: async (campaignId) => [],
-    getStories: async (currentUserId) => [],
-    markStoryAsViewed: async (storyId, userId) => updateDoc(doc(db, 'stories', storyId), { viewedBy: arrayUnion(userId) }),
-    createStory: async (storyData, mediaFile) => ({...storyData, id: '', createdAt: new Date().toISOString(), duration: 5, viewedBy: []}),
+    getRandomActiveCampaign: async (): Promise<Campaign | null> => null,
+    trackAdView: async (campaignId: string) => updateDoc(doc(db, 'campaigns', campaignId), { views: increment(1) }),
+    trackAdClick: async (campaignId: string) => updateDoc(doc(db, 'campaigns', campaignId), { clicks: increment(1) }),
+    submitLead: async (leadData: any) => addDoc(collection(db, 'leads'), { ...leadData, createdAt: serverTimestamp() }),
+    getLeadsForCampaign: async (campaignId: string): Promise<Lead[]> => [],
+    getStories: async (currentUserId: string): Promise<any[]> => [],
+    markStoryAsViewed: async (storyId: string, userId: string) => updateDoc(doc(db, 'stories', storyId), { viewedBy: arrayUnion(userId) }),
+    createStory: async (storyData: any, mediaFile: any): Promise<Story> => ({...storyData, id: '', createdAt: new Date().toISOString(), duration: 5, viewedBy: []}),
     async getGroupById(groupId: string): Promise<Group | null> {
         if (!groupId) return null;
         try {
@@ -2209,8 +2209,8 @@ export const firebaseService = {
             return null;
         }
     },
-    getSuggestedGroups: async (userId) => [],
-    async createGroup(creator, name, description, coverPhotoUrl, privacy, requiresApproval, category) {
+    getSuggestedGroups: async (userId: string): Promise<Group[]> => [],
+    async createGroup(creator: User, name: string, description: string, coverPhotoUrl: string, privacy: 'public' | 'private', requiresApproval: boolean, category: GroupCategory) {
         try {
             const creatorAuthor = {
                 id: creator.id,
@@ -2257,7 +2257,7 @@ export const firebaseService = {
             return null;
         }
     },
-    getPostsForGroup: async (groupId) => [],
+    getPostsForGroup: async (groupId: string): Promise<Post[]> => [],
     async updateGroupSettings(groupId: string, settings: Partial<Group>): Promise<boolean> {
         const groupRef = doc(db, 'groups', groupId);
         try {
@@ -2275,15 +2275,15 @@ export const firebaseService = {
             return false;
         }
     },
-    pinPost: async (groupId, postId) => true,
-    unpinPost: async (groupId) => true,
-    inviteFriendToGroup: async (groupId, friendId) => true,
-    getGroupChat: async (groupId) => null,
-    sendGroupChatMessage: async (groupId, sender, text) => ({ id: '', sender, text, createdAt: '' }),
-    getGroupEvents: async (groupId) => [],
-    createGroupEvent: async (creator, groupId, title, description, date) => null,
-    rsvpToEvent: async (userId, eventId) => true,
-    adminLogin: async (email, password) => {
+    pinPost: async (groupId: string, postId: string): Promise<boolean> => true,
+    unpinPost: async (groupId: string): Promise<boolean> => true,
+    inviteFriendToGroup: async (groupId: string, friendId: string): Promise<boolean> => true,
+    getGroupChat: async (groupId: string): Promise<GroupChat | null> => null,
+    sendGroupChatMessage: async (groupId: string, sender: Author, text: string): Promise<GroupChat> => ({ groupId, messages: [] }),
+    getGroupEvents: async (groupId: string): Promise<Event[]> => [],
+    createGroupEvent: async (creator: User, groupId: string, title: string, description: string, date: string): Promise<Event | null> => null,
+    rsvpToEvent: async (userId: string, eventId: string): Promise<boolean> => true,
+    adminLogin: async (email: string, password: string): Promise<AdminUser | null> => {
         try {
             const adminsRef = collection(db, 'admins');
             const q = query(adminsRef, where("email", "==", email.toLowerCase()));
@@ -2306,7 +2306,7 @@ export const firebaseService = {
             return null;
         }
     },
-    adminRegister: async (email, password) => {
+    adminRegister: async (email: string, password: string): Promise<AdminUser | null> => {
         try {
             const adminsRef = collection(db, 'admins');
             const q = query(adminsRef, where("email", "==", email.toLowerCase()));
@@ -2328,14 +2328,14 @@ export const firebaseService = {
             return null;
         }
     },
-    getAdminDashboardStats: async () => ({ totalUsers: 0, newUsersToday: 0, postsLast24h: 0, pendingCampaigns: 0, activeUsersNow: 0, pendingReports: 0, pendingPayments: 0 }),
-    getAllUsersForAdmin: async () => {
+    getAdminDashboardStats: async (): Promise<any> => ({ totalUsers: 0, newUsersToday: 0, postsLast24h: 0, pendingCampaigns: 0, activeUsersNow: 0, pendingReports: 0, pendingPayments: 0 }),
+    getAllUsersForAdmin: async (): Promise<User[]> => {
         const snapshot = await getDocs(collection(db, 'users'));
         return snapshot.docs.map(docToUser);
     },
-    updateUserRole: async (userId, newRole) => true,
-    getPendingCampaigns: async () => [],
-    approveCampaign: async (campaignId) => {
+    updateUserRole: async (userId: string, newRole: 'admin' | 'user'): Promise<boolean> => true,
+    getPendingCampaigns: async (): Promise<Campaign[]> => [],
+    approveCampaign: async (campaignId: string) => {
         const campaignRef = doc(db, 'campaigns', campaignId);
         const campaignDoc = await getDoc(campaignRef);
         if (campaignDoc.exists()) {
@@ -2345,7 +2345,7 @@ export const firebaseService = {
             await _createNotification(campaign.sponsorId, 'campaign_approved', actor, { campaignName: campaign.sponsorName });
         }
     },
-    rejectCampaign: async (campaignId, reason) => {
+    rejectCampaign: async (campaignId: string, reason: string) => {
         const campaignRef = doc(db, 'campaigns', campaignId);
         const campaignDoc = await getDoc(campaignRef);
         if (campaignDoc.exists()) {
@@ -2355,29 +2355,29 @@ export const firebaseService = {
             await _createNotification(campaign.sponsorId, 'campaign_rejected', actor, { campaignName: campaign.sponsorName, rejectionReason: reason });
         }
     },
-    getAllPostsForAdmin: async () => [],
-    deletePostAsAdmin: async (postId) => true,
-    deleteCommentAsAdmin: async (commentId, postId) => true,
-    getPostById: async (postId) => null,
-    getPendingReports: async () => [],
-    resolveReport: async (reportId, resolution) => {},
-    banUser: async (userId) => true,
-    unbanUser: async (userId) => true,
-    warnUser: async (userId, message) => {
+    getAllPostsForAdmin: async (): Promise<Post[]> => [],
+    deletePostAsAdmin: async (postId: string): Promise<boolean> => true,
+    deleteCommentAsAdmin: async (commentId: string, postId: string): Promise<boolean> => true,
+    getPostById: async (postId: string): Promise<Post | null> => null,
+    getPendingReports: async (): Promise<Report[]> => [],
+    resolveReport: async (reportId: string, resolution: string) => {},
+    banUser: async (userId: string): Promise<boolean> => true,
+    unbanUser: async (userId: string): Promise<boolean> => true,
+    warnUser: async (userId: string, message: string): Promise<boolean> => {
         const actor = { id: 'admin', name: 'VoiceBook Admin' } as User;
         await _createNotification(userId, 'admin_warning', actor, { message });
         return true;
     },
-    suspendUserCommenting: async (userId, days) => true,
-    liftUserCommentingSuspension: async (userId) => true,
-    suspendUserPosting: async (userId, days) => true,
-    liftUserPostingSuspension: async (userId) => true,
-    getUserDetailsForAdmin: async (userId) => null,
-    sendSiteWideAnnouncement: async (message) => true,
-    getAllCampaignsForAdmin: async () => [],
-    verifyCampaignPayment: async (campaignId, adminId) => true,
-    adminUpdateUserProfilePicture: async (userId, base64) => null,
-    reactivateUserAsAdmin: async (userId) => true,
+    suspendUserCommenting: async (userId: string, days: number): Promise<boolean> => true,
+    liftUserCommentingSuspension: async (userId: string): Promise<boolean> => true,
+    suspendUserPosting: async (userId: string, days: number): Promise<boolean> => true,
+    liftUserPostingSuspension: async (userId: string): Promise<boolean> => true,
+    getUserDetailsForAdmin: async (userId: string): Promise<any> => null,
+    sendSiteWideAnnouncement: async (message: string): Promise<boolean> => true,
+    getAllCampaignsForAdmin: async (): Promise<Campaign[]> => [],
+    verifyCampaignPayment: async (campaignId: string, adminId: string): Promise<boolean> => true,
+    adminUpdateUserProfilePicture: async (userId: string, base64: string): Promise<User | null> => null,
+    reactivateUserAsAdmin: async (userId: string): Promise<boolean> => true,
     promoteGroupMember: async (groupId: string, userToPromote: User, newRole: 'Admin' | 'Moderator') => firebaseService.promoteGroupMember(groupId, userToPromote, newRole),
     demoteGroupMember: async (groupId: string, userToDemote: User, oldRole: 'Admin' | 'Moderator') => firebaseService.demoteGroupMember(groupId, userToDemote, oldRole),
     async removeGroupMember(groupId: string, userToRemove: User): Promise<boolean> {
@@ -2424,10 +2424,10 @@ export const firebaseService = {
             transaction.update(userRef, { groupIds: arrayUnion(groupId) });
         });
     },
-    rejectJoinRequest: async (groupId: string, userId: string) => true,
-    approvePost: async (postId: string) => true,
-    rejectPost: async (postId: string) => true,
-    joinGroup: async (userId, groupId, answers) => {
+    rejectJoinRequest: async (groupId: string, userId: string): Promise<boolean> => true,
+    approvePost: async (postId: string): Promise<boolean> => true,
+    rejectPost: async (postId: string): Promise<boolean> => true,
+    joinGroup: async (userId: string, groupId: string, answers?: string[]): Promise<boolean> => {
          const groupRef = doc(db, 'groups', groupId);
          const user = await firebaseService.getUserProfileById(userId);
          if (!user) return false;
