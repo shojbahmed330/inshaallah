@@ -154,11 +154,13 @@ const postSchemaProperties = {
         createdAt: { type: Type.STRING },
         reactions: {
             type: Type.OBJECT,
-            description: "An object where keys are dynamic user IDs and values are their emoji reaction strings (e.g., '❤️').",
+            description: "An object representing user reactions. Keys are dynamic user IDs (strings), and values are emoji strings.",
+            // The Gemini API requires a non-empty properties object for Type.OBJECT.
+            // This acts as a placeholder to define the structure for an object with dynamic keys.
             properties: {
-                "example_user_id": {
+                "placeholder_user_id": {
                     type: Type.STRING,
-                    description: "An example emoji reaction string."
+                    description: "This is a placeholder for a dynamic user ID. The actual key will be a user's unique ID. The value will be an emoji string like '👍' or '❤️'."
                 }
             }
         },
