@@ -49,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
       return `${base} bg-slate-500 cursor-not-allowed`;
     }
     switch (voiceState) {
-        // FIX: Replaced VoiceState.LISTENING with ACTIVE_LISTENING and added PASSIVE_LISTENING with updated styles for consistency.
+        // FIX: Replaced VoiceState.LISTENING with VoiceState.ACTIVE_LISTENING to match the enum definition in types.ts.
         case VoiceState.ACTIVE_LISTENING:
             return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
         case VoiceState.PROCESSING:
@@ -65,7 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
     switch (voiceState) {
         case VoiceState.PROCESSING:
             return <Icon name="logo" className="w-6 h-6 animate-spin" />;
-        // FIX: Replaced VoiceState.LISTENING with ACTIVE_LISTENING and added PASSIVE_LISTENING.
+        // FIX: Replaced VoiceState.LISTENING with VoiceState.ACTIVE_LISTENING to match the enum definition in types.ts.
         case VoiceState.ACTIVE_LISTENING:
         case VoiceState.PASSIVE_LISTENING:
         default:
@@ -80,7 +80,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
     switch (voiceState) {
         case VoiceState.PROCESSING:
             return "Processing...";
-        // FIX: Replaced VoiceState.LISTENING with ACTIVE_LISTENING and added PASSIVE_LISTENING with specific text for better user feedback.
+        // FIX: Replaced VoiceState.LISTENING with VoiceState.ACTIVE_LISTENING to match the enum definition in types.ts.
         case VoiceState.ACTIVE_LISTENING:
             return "Listening...";
         case VoiceState.PASSIVE_LISTENING:

@@ -607,6 +607,21 @@ const UserApp: React.FC = () => {
     setVoiceState(VoiceState.IDLE);
   }, []);
 
+  // Unhandled command timeout to prevent the app from getting stuck
+  useEffect(() => {
+    if (voiceState === VoiceState.PROCESSING) {
+      const timer = setTimeout(() => {
+        // If still processing after 4 seconds, it's likely stuck on an unhandled command.
+        console.warn(`Command "${lastCommand}" may have been unhandled. Resetting voice state.`);
+        setTtsMessage("Sorry, I can't do that from here.");
+        handleCommandProcessed(); // Force reset
+      }, 4000); // 4-second timeout
+
+      return () => clearTimeout(timer);
+    }
+  }, [voiceState, lastCommand, handleCommandProcessed]);
+
+
   // Global Command Handler
   useEffect(() => {
       if (!lastCommand) return;
@@ -658,11 +673,17 @@ const UserApp: React.FC = () => {
                   }
                   break;
               
+              case 'unknown':
+                  setTtsMessage("Sorry, I didn't understand that.");
+                  break; // This will trigger the cleanup below
+
               default:
                   commandHandled = false;
           }
   
-          if (commandHandled) {
+          // If the command was handled here, or it was completely unknown, reset the state.
+          // If it was a valid but unhandled command, leave it for a child component to handle.
+          if (commandHandled || intent === 'unknown') {
               handleCommandProcessed();
           }
       };
@@ -769,7 +790,7 @@ const UserApp: React.FC = () => {
 
         recognition.onresult = (event: any) => {
             const transcript = Array.from(event.results).map((result: any) => result[0].transcript).join('');
-            if (transcript.toLowerCase().includes('hey voicebook') || transcript.toLowerCase().includes('voicebook')) {
+            if (transcript.toLowerCase().includes('hey voicebook') || transcript.toLowerCase().includes('hay voicebook') || transcript.toLowerCase().includes('voice book')) {
                 stopPassiveListenerRef.current = true;
                 recognition.stop();
                 handleMicClick();
