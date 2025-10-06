@@ -116,7 +116,7 @@ export const GroupChatScreen: React.FC<GroupChatScreenProps> = ({
     e.preventDefault();
     if (!newMessage.trim() || !group) return;
     
-    await geminiService.sendGroupChatMessage(groupId, currentUser as Author, newMessage);
+    await geminiService.sendGroupChatMessage(groupId, currentUser as Author, newMessage, replyingTo);
     
     setNewMessage('');
     setReplyingTo(null);
@@ -148,7 +148,7 @@ export const GroupChatScreen: React.FC<GroupChatScreenProps> = ({
             key={msg.id}
             message={msg}
             isMe={msg.sender.id === currentUser.id}
-            onReply={() => {}}
+            onReply={setReplyingTo}
             onReact={handleReact}
             onOpenProfile={onOpenProfile}
           />

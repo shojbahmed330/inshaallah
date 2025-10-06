@@ -202,6 +202,7 @@ const CreatePostScreen: React.FC<CreatePostScreenProps> = ({ currentUser, onPost
                 imageCaptions: hasMedia ? imageCaptions : undefined,
             };
             
+            // @FIX: 'mediaFile' does not exist. It should be 'mediaFiles' and expect an array.
             await firebaseService.createPost(
                 postBaseData, 
                 { 

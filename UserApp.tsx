@@ -10,7 +10,6 @@ import { ProfileScreen } from './components/ProfileScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PostDetailScreen from './components/PostDetailScreen';
 import FriendsScreen from './components/FriendsScreen';
-// FIX: Changed to named import to resolve module error.
 import { SearchResultsScreen } from './components/SearchResultsScreen';
 import NotificationPanel from './components/NotificationPanel';
 import Sidebar from './components/Sidebar';
@@ -31,7 +30,6 @@ import LiveVideoRoomScreen from './components/LiveVideoRoomScreen';
 import GroupsHubScreen from './components/GroupsHubScreen';
 import GroupPageScreen from './components/GroupPageScreen';
 import ManageGroupScreen from './components/ManageGroupScreen';
-// FIX: Changed to named import to resolve module error.
 import { GroupChatScreen } from './components/GroupChatScreen';
 import GroupEventsScreen from './components/GroupEventsScreen';
 import CreateEventScreen from './components/CreateEventScreen';
@@ -51,7 +49,6 @@ import CommentSheet from './components/CommentSheet';
 import ReportModal from './components/ReportModal';
 import VoiceIndicator from './components/VoiceIndicator';
 
-// FIX: Add type definition for the non-standard SpeechRecognition API to resolve build errors.
 declare global {
     interface Window {
         SpeechRecognition: any;
@@ -65,7 +62,7 @@ interface ViewState {
   props?: any;
 }
 
-interface CommandResponse {
+export interface CommandResponse {
   intent: string;
   slots?: { [key: string]: string | number };
 }
@@ -208,7 +205,6 @@ const UserApp: React.FC = () => {
   
   const userRef = useRef(user);
   userRef.current = user;
-  // FIX: Use `any` for SpeechRecognition ref to avoid type errors with non-standard browser APIs.
   const recognitionRef = useRef<any | null>(null);
   const commandTimeoutRef = useRef<number | null>(null);
   
@@ -319,7 +315,6 @@ const UserApp: React.FC = () => {
             const isAlreadyActive = activeChatsRef.current.some(c => c.id === convoWithNewMessage.peer.id);
             const isMobile = window.innerWidth < 768;
 
-            // Only auto-open if it's NOT the initial load and NOT on a mobile device.
             if (!isAlreadyActive && !isFirstConversationLoad.current && !isMobile) {
                 handleOpenConversation(convoWithNewMessage.peer);
             }
@@ -332,7 +327,6 @@ const UserApp: React.FC = () => {
             }
         });
 
-        // Set this flag to false after the first execution.
         if (isFirstConversationLoad.current) {
             isFirstConversationLoad.current = false;
         }
@@ -388,7 +382,6 @@ const UserApp: React.FC = () => {
             : await geminiService.unsavePost(user.id, post.id);
         
         if (success) {
-            // Update the user state optimistically
             setUser(prevUser => {
                 if (!prevUser) return null;
                 const currentSavedIds = new Set(prevUser.savedPostIds || []);
@@ -405,7 +398,6 @@ const UserApp: React.FC = () => {
     const handleCopyLink = (post: Post) => {
         const postUrl = `${window.location.origin}${window.location.pathname}#/post/${post.id}`;
         navigator.clipboard.writeText(postUrl).then(() => {
-            // Maybe show a small toast/snackbar here in the future
             console.log("Link copied");
         }).catch(() => {
             console.error("Failed to copy link");
@@ -424,7 +416,6 @@ const UserApp: React.FC = () => {
         if (!reportModalContent || !user) return;
         
         await geminiService.createReport(user, reportModalContent.content, reportModalContent.contentType, reason);
-        // Maybe show a success toast
         setReportModalContent(null);
     };
 
@@ -441,7 +432,6 @@ const UserApp: React.FC = () => {
       };
   }, []);
 
-  // Effect 1: Handles authentication state changes. Only sets the current user ID or handles logout.
   useEffect(() => {
     const unsubscribeAuth = firebaseService.onAuthStateChanged((userAuth) => {
         setCurrentUserId(userAuth?.id || null);
@@ -461,7 +451,6 @@ const UserApp: React.FC = () => {
     return () => unsubscribeAuth();
   }, []);
 
-  // Effect 2: Listens to the current user's profile document once we have a user ID.
   useEffect(() => {
       if (!currentUserId) return;
 
@@ -492,7 +481,6 @@ const UserApp: React.FC = () => {
       return () => unsubscribeUserDoc();
   }, [currentUserId, initialDeepLink, language, handleLogout]);
 
-  // Effect 3: Manages data subscriptions that depend only on the user's ID.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -524,8 +512,6 @@ const UserApp: React.FC = () => {
     };
   }, [user?.id]);
 
-  // Effect 4: Manages data subscriptions that depend on friend/block lists.
-  // This effect will ONLY re-run if the content of friendIds or blockedUserIds changes.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -538,9 +524,6 @@ const UserApp: React.FC = () => {
     });
     unsubscribes.push(unsubscribePosts);
     
-    // --- FETCH FRIENDS (NO POLLING) ---
-    // The previous polling logic was causing permission errors. 
-    // This fetches friends once when the friend list changes, making the app more stable.
     let isMounted = true;
     const fetchFriends = async () => {
         if (!user?.id) return;
@@ -575,13 +558,12 @@ const UserApp: React.FC = () => {
 
     const handleCommand = useCallback(async (command: string) => {
         setVoiceState(VoiceState.PROCESSING);
-        setTtsMessage(''); // Clear previous TTS
+        setTtsMessage('');
         try {
             const intentResponse = await geminiService.processIntent(command);
             setLastCommand(command);
             setLastCommandResponse(intentResponse);
 
-            // Handle global navigation immediately
             switch(intentResponse.intent) {
                 case 'intent_open_feed': handleNavigation('feed'); break;
                 case 'intent_open_friends_page': handleNavigation('friends'); break;
@@ -609,7 +591,6 @@ const UserApp: React.FC = () => {
         }
     }, [user, navigate, goBack, language, onCommandProcessed, handleNavigation]);
 
-    // --- Voice Recognition Effect ---
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -629,9 +610,8 @@ const UserApp: React.FC = () => {
             };
 
             recognitionRef.current.onend = () => {
-                // The service might stop unexpectedly. Restart it unless we're in IDLE.
-                if (voiceState !== VoiceState.IDLE) {
-                    recognitionRef.current?.start();
+                if (voiceState !== VoiceState.IDLE && recognitionRef.current) {
+                    try { recognitionRef.current.start(); } catch(e) { console.error(e); }
                 }
             };
             
@@ -667,10 +647,10 @@ const UserApp: React.FC = () => {
                      } else if(fullTranscript.trim()){
                          commandTimeoutRef.current = window.setTimeout(() => {
                              handleCommand(fullTranscript.trim());
-                         }, 1500); // Wait 1.5s for user to finish speaking
+                         }, 1500); 
                      }
-                } else { // Passive listening for hotword
-                    const hotwords = ['hey voicebook', 'voice book', 'hay voicebook', 'هেই ভয়েসবুক'];
+                } else {
+                    const hotwords = ['hey voicebook', 'voice book', 'hay voicebook', 'হেই ভয়েসবুক'];
                     if (hotwords.some(hotword => fullTranscript.includes(hotword))) {
                         setVoiceState(VoiceState.ACTIVE_LISTENING);
                         setTtsMessage("Listening...");
@@ -680,7 +660,6 @@ const UserApp: React.FC = () => {
             };
         }
         
-        // Start listening if user is logged in
         if (user && voiceState === VoiceState.IDLE) {
             try {
                 recognitionRef.current.start();
@@ -698,9 +677,9 @@ const UserApp: React.FC = () => {
 
     }, [user, voiceState, language, handleCommand]);
     
-    // --- Text-to-Speech Effect ---
     useEffect(() => {
         if (ttsMessage) {
+            window.speechSynthesis.cancel(); // Cancel any previous speech
             const utterance = new SpeechSynthesisUtterance(ttsMessage);
             utterance.lang = language === 'bn' ? 'bn-BD' : 'en-US';
             window.speechSynthesis.speak(utterance);
@@ -893,8 +872,6 @@ const UserApp: React.FC = () => {
   }
   
   const handleGroupCreated = (newGroup: Group) => {
-    // Optimistically update the local state so the new group appears immediately
-    // This ensures that when the user navigates back, the group is in the list.
     setGroups(prevGroups => [newGroup, ...prevGroups.filter(g => g.id !== newGroup.id)]);
     navigate(AppView.GROUP_PAGE, { groupId: newGroup.id });
   };
@@ -979,7 +956,6 @@ const UserApp: React.FC = () => {
   };
 
   const handleOpenPhotoViewer = (post: Post, initialUrl?: string) => {
-    // FIX: Property 'imageUrls' does not exist on type 'Post'. Replaced with 'imageDetails' and corrected logic to correctly select an array of image URLs.
     let allUrls: string[] = [];
     if (post.imageDetails && post.imageDetails.length > 0) {
       allUrls = post.imageDetails.map(detail => detail.url);
@@ -1070,7 +1046,6 @@ const UserApp: React.FC = () => {
         return <div className="flex items-center justify-center h-full text-fuchsia-400">Loading VoiceBook...</div>;
     }
 
-    // FIX: Pass `setTtsMessage` to `onSetTtsMessage` prop for child components.
     const commonProps = {
         lastCommand,
         lastCommandResponse,

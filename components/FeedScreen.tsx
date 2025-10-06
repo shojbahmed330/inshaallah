@@ -9,6 +9,12 @@ import StoriesTray from './StoriesTray';
 import { firebaseService } from '../services/firebaseService';
 import { useSettings } from '../contexts/SettingsContext';
 
+interface CommandResponse {
+  intent: string;
+  slots?: { [key: string]: string | number };
+}
+
+
 interface FeedScreenProps {
   isLoading: boolean;
   posts: Post[];
@@ -33,13 +39,17 @@ interface FeedScreenProps {
   onHidePost: (postId: string) => void;
   onSavePost: (post: Post, isSaving: boolean) => void;
   onCopyLink: (post: Post) => void;
+  lastCommandResponse: CommandResponse | null;
+  onCommandProcessed: () => void;
+  onSetTtsMessage: (message: string) => void;
 }
 
 const FeedScreen: React.FC<FeedScreenProps> = ({
     isLoading, posts: initialPosts, currentUser, onOpenProfile,
     onOpenComments, onReactToPost, onStartCreatePost, onRewardedAdClick, onAdViewed,
     onAdClick, scrollState, onSetScrollState, onNavigate, friends, setSearchResults,
-    onSharePost, onOpenPhotoViewer, onDeletePost, onReportPost, hiddenPostIds, onHidePost, onSavePost, onCopyLink
+    onSharePost, onOpenPhotoViewer, onDeletePost, onReportPost, hiddenPostIds, onHidePost, onSavePost, onCopyLink,
+    lastCommandResponse, onCommandProcessed, onSetTtsMessage
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [adInjected, setAdInjected] = useState(false);
@@ -79,9 +89,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
           const adStoryGroup = {
               author: adStory.author,
               stories: [adStory],
-              allViewed: false, // Doesn't apply to ads
+              allViewed: false,
           };
-          // Inject the ad story at the second position
           const combinedStories = [...realStories];
           combinedStories.splice(1, 0, adStoryGroup);
           setStoriesByAuthor(combinedStories);
@@ -137,8 +146,66 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
     };
   }, [scrollState]);
 
+    useEffect(() => {
+        if (!lastCommandResponse) return;
+
+        const { intent, slots } = lastCommandResponse;
+        const currentPost = visiblePosts[currentPostIndex];
+
+        switch (intent) {
+            case 'intent_next_post':
+                isProgrammaticScroll.current = true;
+                setCurrentPostIndex(prev => (prev < 0 ? 0 : Math.min(prev + 1, visiblePosts.length - 1)));
+                break;
+            case 'intent_previous_post':
+                isProgrammaticScroll.current = true;
+                setCurrentPostIndex(prev => Math.max(0, prev - 1));
+                break;
+            case 'intent_play_post':
+                if (currentPostIndex === -1 && visiblePosts.length > 0) {
+                    isProgrammaticScroll.current = true;
+                    setCurrentPostIndex(0);
+                }
+                setIsPlaying(true);
+                break;
+            case 'intent_pause_post':
+                setIsPlaying(false);
+                break;
+            case 'intent_like':
+                 if (currentPost && !currentPost.isSponsored) {
+                  onReactToPost(currentPost.id, '👍');
+                }
+                break;
+            case 'intent_share':
+                if (currentPost) onSharePost(currentPost);
+                break;
+            case 'intent_comment':
+                 if (currentPost && !currentPost.isSponsored) {
+                    onOpenComments(currentPost);
+                }
+                break;
+            case 'intent_scroll_down': onSetScrollState(ScrollState.DOWN); break;
+            case 'intent_scroll_up': onSetScrollState(ScrollState.UP); break;
+            case 'intent_stop_scroll': onSetScrollState(ScrollState.NONE); break;
+            case 'intent_create_voice_post': onStartCreatePost({ startRecording: true }); break;
+            case 'intent_search_user':
+                if (slots?.target_name) {
+                    const query = slots.target_name as string;
+                    geminiService.searchUsers(query).then(results => {
+                        setSearchResults(results);
+                        onNavigate(AppView.SEARCH_RESULTS, { query });
+                    });
+                }
+                break;
+        }
+
+        onCommandProcessed();
+
+    }, [lastCommandResponse, visiblePosts, currentPostIndex, onReactToPost, onOpenComments, onSetScrollState, onStartCreatePost, onCommandProcessed, onSharePost, setSearchResults, onNavigate]);
+
+
   useEffect(() => {
-    if (isInitialLoad.current || posts.length === 0 || currentPostIndex < 0 || !isProgrammaticScroll.current) return;
+    if (!isProgrammaticScroll.current || visiblePosts.length === 0 || currentPostIndex < 0) return;
 
     const cardElement = postRefs.current[currentPostIndex];
     if (cardElement) {
@@ -149,16 +216,16 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         
         return () => clearTimeout(scrollTimeout);
     }
-  }, [currentPostIndex, posts]);
+  }, [currentPostIndex, visiblePosts]);
 
   useEffect(() => {
-    if (isInitialLoad.current || posts.length === 0 || currentPostIndex < 0) return;
+    if (isInitialLoad.current || visiblePosts.length === 0 || currentPostIndex < 0) return;
     
-    const activePost = posts[currentPostIndex];
+    const activePost = visiblePosts[currentPostIndex];
     if (activePost?.isSponsored && activePost.campaignId) {
         onAdViewed(activePost.campaignId);
     }
-  }, [currentPostIndex, posts, onAdViewed]);
+  }, [currentPostIndex, visiblePosts, onAdViewed]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -197,7 +264,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
             if (ref) observer.unobserve(ref);
         });
     };
-  }, [posts]);
+  }, [visiblePosts]);
 
 
   useEffect(() => {
@@ -217,7 +284,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
   }
 
   return (
-    <div ref={feedContainerRef} className="w-full max-w-lg md:max-w-2xl mx-auto flex flex-col items-center gap-6">
+    <div ref={feedContainerRef} className="w-full max-w-lg md:max-w-2xl mx-auto flex flex-col items-center gap-6 pt-6">
         <StoriesTray 
             currentUser={currentUser}
             storiesByAuthor={storiesByAuthor}
@@ -230,7 +297,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         />
         <div className="w-full border-t border-fuchsia-500/20" />
         <RewardedAdWidget campaign={rewardedCampaign} onAdClick={onRewardedAdClick} />
-        {visiblePosts.filter(Boolean).map((post, index) => (
+        {visiblePosts.map((post, index) => (
             <div 
                 key={`${post.id}-${index}`} 
                 className="w-full"
@@ -243,13 +310,18 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                     isActive={index === currentPostIndex}
                     isPlaying={isPlaying && index === currentPostIndex}
                     onPlayPause={() => {
-                        if (post.isSponsored && (post.videoUrl || post.imageUrl)) return;
-                        if (index === currentPostIndex) {
-                            setIsPlaying(p => !p)
+                        if (post.audioUrl) {
+                            if (index === currentPostIndex) {
+                                setIsPlaying(p => !p)
+                            } else {
+                                isProgrammaticScroll.current = true;
+                                setCurrentPostIndex(index);
+                                setIsPlaying(true);
+                            }
+                        } else if(post.videoUrl) {
+                            // Video handled by native controls
                         } else {
-                            isProgrammaticScroll.current = true;
-                            setCurrentPostIndex(index);
-                            setIsPlaying(true);
+                            onOpenComments(post);
                         }
                     }}
                     onReact={onReactToPost}
