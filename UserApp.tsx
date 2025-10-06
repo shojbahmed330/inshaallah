@@ -595,7 +595,6 @@ const UserApp: React.FC = () => {
     try {
         const correctedText = await geminiService.correctTranscript(rawTranscript);
         handleCommand(correctedText);
-
     } catch (error) {
         console.error("Error correcting transcript:", error);
         setTtsMessage("Correction failed. Using original text.");
@@ -1398,6 +1397,7 @@ const UserApp: React.FC = () => {
             onPostComment={(postId, text, parentId) => handlePostComment(postId, text, parentId, undefined)}
             onEditComment={handleEditComment}
             onDeleteComment={handleDeleteComment}
+            onDeletePost={handleDeletePost}
             onOpenProfile={handleOpenProfile}
             onSharePost={handleSharePost}
             onOpenPhotoViewer={handleOpenPhotoViewer}

@@ -54,8 +54,13 @@ const HelpScreen: React.FC<HelpScreenProps> = ({ onGoBack }) => {
                     <CommandItem command="Scroll down / নিচে যাও" description="Starts scrolling the page down continuously." />
                     <CommandItem command="Scroll up / উপরে যাও" description="Starts scrolling the page up continuously." />
                     <CommandItem command="Stop scroll / থামো" description="Stops the continuous scroll." />
-                    <CommandItem command="Like this post / লাইক দাও" description="Likes the current post on screen." />
-                    <CommandItem command="Comment on this post" description="Opens the comment section for the current post." />
+                    <CommandItem command="like this post / love dao / haha" description="Reacts to the current post. You can say 'like', 'love', 'haha', 'sad', 'wow', 'angry', or their Bengali equivalents (e.g., 'bhalobasha')." />
+                    <CommandItem command="comment on this post [your comment]" description="Example: 'comment on this post khub sundor'." />
+                    <CommandItem command="post comment / কমেন্ট পোস্ট কর" description="Publishes the comment you have written." />
+                    <CommandItem command="open this post / পোস্ট-টি খোল" description="Opens the images of the current post in a full-screen viewer." />
+                    <CommandItem command="next image / পরের ছবি" description="While viewing images, this shows the next one." />
+                    <CommandItem command="previous image / আগের ছবি" description="While viewing images, this shows the previous one." />
+                    <CommandItem command="comment on this image [your comment]" description="While viewing a specific image, you can add a comment to it. Example: 'comment on this image sundor'." />
                     <CommandItem command="Share this post / শেয়ার কর" description="Opens the sharing options for the current post." />
                     <CommandItem command="Save this post / পোস্ট সেভ কর" description="Saves the current post to your 'Saved' list." />
                     <CommandItem command="Hide this post / পোস্ট লুকাও" description="Hides the current post from your feed for this session." />

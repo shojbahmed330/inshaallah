@@ -6,7 +6,6 @@ import { firebaseService } from '../services/firebaseService';
 import Icon from './Icon';
 import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
-// FIX: Import geminiService to handle marking the best answer.
 import { geminiService } from '../services/geminiService';
 
 interface CommentSheetProps {
@@ -19,14 +18,15 @@ interface CommentSheetProps {
   onPostComment: (postId: string, text: string, parentId?: string | null, imageId?: string) => Promise<void>;
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
-  onReportPost: (post: Post) => void;
-  onReportComment: (comment: Comment) => void;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
+  onReportPost: (post: Post) => void;
+  onReportComment: (comment: Comment) => void;
   initialText?: string;
   lastCommand: string | null;
   onCommandProcessed: () => void;
+  onDeletePost: (postId: string) => void;
 }
 
 const CommentSheet: React.FC<CommentSheetProps> = ({
@@ -47,8 +47,10 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
   initialText,
   lastCommand,
   onCommandProcessed,
+  onDeletePost,
 }) => {
   const [post, setPost] = useState<Post | null>(initialPost);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [playingCommentId, setPlayingCommentId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Comment | null>(commentToReplyTo || null);
   const [newCommentText, setNewCommentText] = useState(initialText || '');
@@ -80,6 +82,18 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
         commentInputRef.current?.focus();
     }
   }, [replyingTo, commentToReplyTo, initialText]);
+  
+  useEffect(() => {
+    if (!lastCommand) return;
+    const processCommand = async () => {
+      if (lastCommand.toLowerCase().includes('post comment') && newCommentText.trim()) {
+        await handlePostCommentSubmit({ preventDefault: () => {} } as React.FormEvent);
+      }
+      onCommandProcessed();
+    };
+    processCommand();
+  }, [lastCommand, newCommentText, onCommandProcessed]);
+
 
   const commentsToDisplay = useMemo(() => {
     if (!post?.comments) return [];
