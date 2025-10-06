@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { AuthMode } from './types';
+import { AuthMode, VoiceState } from './types';
 import { firebaseService } from './services/firebaseService';
 import Icon from './components/Icon';
 import { getTtsPrompt } from './constants';
@@ -138,9 +137,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ ttsMessage, onSetTtsMessage, la
     if (!lastCommand) return;
     
     // For Auth screen, we assume any command that isn't 'login' or 'signup' is input.
-    // A more complex NLU could be used here, but this is simpler.
-    const isLoginCommand = ['log in', 'login', 'login koro'].includes(lastCommand.toLowerCase());
-    const isSignupCommand = ['sign up', 'signup', 'register'].includes(lastCommand.toLowerCase());
+    const isLoginCommand = ['log in', 'login', 'login koro', 'লগইন'].includes(lastCommand.toLowerCase());
+    const isSignupCommand = ['sign up', 'signup', 'register', 'সাইন আপ', 'রেজিস্টার'].includes(lastCommand.toLowerCase());
 
     if (isLoginCommand) {
         resetSignupState();
@@ -161,26 +159,32 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ ttsMessage, onSetTtsMessage, la
     if (mode === AuthMode.LOGIN) return null;
     return (
         <div className="mt-4 text-left text-sm space-y-1">
-           {fullName && <p className="text-gray-500">Full Name: <span className="text-gray-800">{fullName}</span></p>}
-           {username && <p className="text-gray-500">Username: <span className="text-gray-800">@{username}</span></p>}
-           {email && <p className="text-gray-500">Email: <span className="text-gray-800">{email}</span></p>}
-           {password && <p className="text-gray-500">Password: <span className="text-gray-800">********</span></p>}
+           {fullName && <p className="text-slate-400">Full Name: <span className="text-slate-200">{fullName}</span></p>}
+           {username && <p className="text-slate-400">Username: <span className="text-slate-200">@{username}</span></p>}
+           {email && <p className="text-slate-400">Email: <span className="text-slate-200">{email}</span></p>}
+           {password && <p className="text-slate-400">Password: <span className="text-slate-200">********</span></p>}
         </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center text-gray-800 p-8 bg-slate-100">
-      <Icon name="logo" className="w-24 h-24 text-blue-600 mb-6" />
-      <h1 className="text-4xl font-bold mb-8">VoiceBook</h1>
+    <div className="flex flex-col items-center justify-center h-full text-center text-fuchsia-400 p-4 sm:p-8 bg-black">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(217,70,239,0.3),rgba(255,255,255,0))] opacity-20 pointer-events-none"></div>
       
-      <div className="bg-white rounded-lg p-6 w-full max-w-sm shadow-xl">
-        <p className={`font-medium text-lg min-h-[3em] flex items-center justify-center ${authError ? 'text-red-500' : 'text-blue-600'}`}>
+      <Icon name="logo" className="w-24 h-24 text-fuchsia-400 mb-4 text-shadow-lg" />
+      <h1 className="text-5xl font-bold mb-2 text-shadow-lg">VoiceBook</h1>
+      <p className="text-fuchsia-400/80 mb-8 animate-pulse">The Social Experience</p>
+      
+      <div className="bg-slate-800/50 rounded-lg p-6 w-full max-w-sm shadow-2xl border border-fuchsia-500/20">
+        <p className={`font-semibold text-lg min-h-[3em] flex items-center justify-center transition-colors ${authError ? 'text-red-400' : 'text-fuchsia-300'}`}>
           {isLoading ? 'Processing...' : (authError || ttsMessage)}
         </p>
         { (mode > AuthMode.LOGIN) && renderSignupProgress() }
-        { (mode === AuthMode.LOGIN && identifier) && <p className="text-gray-500 text-sm mt-4">Logging in as: <span className="text-gray-800">{identifier}</span></p> }
+        { (mode === AuthMode.LOGIN && identifier) && <p className="text-slate-400 text-sm mt-4">Logging in as: <span className="text-slate-200">{identifier}</span></p> }
       </div>
+       <div className="mt-6 text-slate-400 text-sm">
+            Say <span className="font-bold text-fuchsia-300">"Login"</span> or <span className="font-bold text-fuchsia-300">"Sign Up"</span> to begin.
+       </div>
     </div>
   );
 };

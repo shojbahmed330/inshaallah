@@ -7,11 +7,9 @@ import Icon from './Icon';
 
 interface AdminPanelScreenProps {
   currentUser: User;
-  onSetTtsMessage: (message: string) => void;
-  lastCommand: string | null;
 }
 
-const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({ currentUser, onSetTtsMessage, lastCommand }) => {
+const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({ currentUser }) => {
     const [pendingCampaigns, setPendingCampaigns] = useState<Campaign[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
@@ -24,13 +22,11 @@ const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({ currentUser, onSetT
     }, []);
 
     useEffect(() => {
-        onSetTtsMessage("Admin panel loaded. Review pending campaigns below.");
         fetchPendingCampaigns();
-    }, [onSetTtsMessage, fetchPendingCampaigns]);
+    }, [fetchPendingCampaigns]);
 
     const handleApprove = async (campaignId: string) => {
         await geminiService.approveCampaign(campaignId);
-        onSetTtsMessage("Campaign approved and is now active.");
         fetchPendingCampaigns(); // Refresh the list
     };
     
@@ -38,11 +34,9 @@ const AdminPanelScreen: React.FC<AdminPanelScreenProps> = ({ currentUser, onSetT
         const reason = rejectionReasons[campaignId];
         if (!reason || reason.trim() === '') {
             alert('Please provide a reason for rejection.');
-            onSetTtsMessage("Rejection failed. Please provide a reason.");
             return;
         }
         await geminiService.rejectCampaign(campaignId, reason);
-        onSetTtsMessage("Campaign has been rejected. The user will be notified.");
         fetchPendingCampaigns(); // Refresh the list
     };
 

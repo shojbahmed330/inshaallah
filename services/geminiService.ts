@@ -14,6 +14,65 @@ if (!apiKey) {
 const ai = new GoogleGenAI({ apiKey });
 
 export const geminiService = {
+  // FIX: Add the missing processIntent function to handle voice commands.
+  // --- Intent Processing ---
+  async processIntent(command: string, context?: any): Promise<{ intent: string; slots?: any }> {
+    const systemInstruction = `You are an intent recognition system for a social media app called VoiceBook. Your task is to understand user commands and extract relevant information.
+    
+    Available Intents:
+    - intent_open_feed, intent_open_friends_page, intent_open_messages, intent_open_settings, intent_go_back, intent_create_post, intent_create_voice_post, intent_stop_recording, intent_re_record, intent_post_confirm, intent_like, intent_share, intent_comment, intent_play_post, intent_pause_post, intent_next_post, intent_previous_post, intent_scroll_down, intent_scroll_up, intent_stop_scroll, intent_reload_page, intent_clear_image, intent_create_poll, intent_create_campaign, intent_view_campaign_dashboard, intent_launch_campaign, intent_create_group, intent_manage_group, intent_open_group_invite_page, intent_open_group_chat, intent_open_group_events, intent_add_music, intent_post_story, intent_unknown.
+    
+    Intents with slots:
+    - intent_open_profile: { "target_name": "my" | "<user name>" }
+    - intent_add_friend: { "target_name": "<user name>" }
+    - intent_accept_request: { "target_name": "<user name>" }
+    - intent_decline_request: { "target_name": "<user name>" }
+    - intent_unfriend_user: { "target_name": "<user name>" }
+    - intent_cancel_friend_request: { "target_name": "<user name>" }
+    - intent_play_comment_by_author: { "target_name": "<user name>" }
+    - intent_search_user: { "target_name": "<user name>" }
+    - intent_generate_image: { "prompt": "<image description>" }
+    - intent_set_sponsor_name: { "sponsor_name": "<name>" }
+    - intent_set_campaign_caption: { "caption_text": "<text>" }
+    - intent_set_campaign_budget: { "budget_amount": "<number>" }
+    - intent_set_media_type: { "media_type": "image" | "video" | "audio" }
+    - intent_view_group_by_name: { "group_name": "<group name>" }
+    - intent_filter_groups_by_category: { "category_name": "<category>" }
+    - intent_search_group: { "search_query": "<query>" }
+    - intent_add_text_to_story: { "text": "<story text>" }
+    - intent_set_story_privacy: { "privacy_level": "public" | "friends" }
+
+    Context for the current screen may be provided. Use it to resolve ambiguity. Context: ${JSON.stringify(context || {})}
+    
+    Respond with a single JSON object: {"intent": "intent_name", "slots": {"key": "value"}}. Do not add any other text.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Command: "${command}"`,
+            config: {
+                systemInstruction,
+                responseMimeType: 'application/json',
+            },
+        });
+        
+        const jsonString = response.text.trim();
+        const cleanedJsonString = jsonString.replace(/^```json\s*|```$/g, '');
+        const result = JSON.parse(cleanedJsonString);
+        return result;
+
+    } catch (error) {
+        console.error("Error processing intent with Gemini:", error);
+        try {
+            const match = error.toString().match(/\{.*\}/s);
+            if (match) {
+                return JSON.parse(match[0]);
+            }
+        } catch(e) { /* ignore parse error */ }
+        return { intent: 'intent_unknown' };
+    }
+  },
+  
   // --- Friends ---
   getFriendRequests: (userId: string): Promise<User[]> => firebaseService.getFriendRequests(userId),
   acceptFriendRequest: (currentUserId: string, requestingUserId: string) => firebaseService.acceptFriendRequest(currentUserId, requestingUserId),
@@ -150,68 +209,6 @@ export const geminiService = {
         console.error("Error editing image with Gemini:", error);
         return null;
     }
-  },
-  
-  // FIX: Added missing processIntent method.
-  async processIntent(command: string, context?: any): Promise<{ intent: string, slots?: any }> {
-    // This is a mock implementation. A real implementation would call the Gemini API.
-    // For now, it uses simple keyword matching to resolve build errors and provide basic functionality.
-    const lowerCommand = command.toLowerCase().trim();
-
-    // Context-sensitive parsing (example)
-    if (context?.userNames && context.userNames.length > 0) {
-        for (const name of context.userNames) {
-            if (lowerCommand.includes(name.toLowerCase())) {
-                if (lowerCommand.startsWith('like')) return { intent: 'intent_like', slots: { target_name: name } };
-                if (lowerCommand.includes('profile')) return { intent: 'intent_open_profile', slots: { target_name: name } };
-                if (lowerCommand.includes('comment')) return { intent: 'intent_view_comments_by_author', slots: { target_name: name } };
-            }
-        }
-    }
-
-    // General commands
-    if (lowerCommand.startsWith('search for')) return { intent: 'intent_search_user', slots: { target_name: lowerCommand.substring('search for'.length).trim() } };
-    if (lowerCommand.startsWith('generate image')) return { intent: 'intent_generate_image', slots: { prompt: command.substring('generate image'.length).trim() } };
-    if (lowerCommand.startsWith('add text')) return { intent: 'intent_add_text_to_story', slots: { text: command.substring('add text'.length).trim() } };
-    
-    // Simple keyword matching
-    const intents: {[key: string]: string} = {
-        'back': 'intent_go_back', 'go back': 'intent_go_back',
-        'save': 'intent_save_settings',
-        'next': 'intent_next_post',
-        'previous': 'intent_previous_post',
-        'play': 'intent_play_post',
-        'pause': 'intent_pause_post',
-        'like': 'intent_like',
-        'share': 'intent_share',
-        'comment': 'intent_comment',
-        'view comments': 'intent_view_comments',
-        'open profile': 'intent_open_profile',
-        'create post': 'intent_create_post',
-        'record voice': 'intent_create_voice_post',
-        'stop recording': 'intent_stop_recording',
-        're-record': 'intent_re_record',
-        'post': 'intent_post_confirm',
-        'clear image': 'intent_clear_image',
-        'create poll': 'intent_create_poll',
-        'add friend': 'intent_add_friend',
-        'accept': 'intent_accept_request',
-        'unfriend': 'intent_unfriend_user',
-        'cancel request': 'intent_cancel_friend_request',
-        'create group': 'intent_create_group',
-        'manage group': 'intent_manage_group',
-        'open chat': 'intent_open_group_chat',
-        'open events': 'intent_open_group_events',
-        'add music': 'intent_add_music',
-        'share story': 'intent_post_story',
-    };
-    for (const keyword in intents) {
-        if (lowerCommand.includes(keyword)) {
-            return { intent: intents[keyword] };
-        }
-    }
-
-    return { intent: 'unknown_intent', slots: {} };
   },
 
   // Music Library (Mock)

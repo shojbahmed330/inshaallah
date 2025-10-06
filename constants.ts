@@ -3,6 +3,9 @@
 import { FriendshipStatus, type User, type Post, type Message, type Comment, type ChatTheme, type AdminUser, type LiveAudioRoom, type LiveVideoRoom, type Campaign, type Group, type Event, type GroupChat, type GroupCategory, type MusicTrack, type Story, type StoryTextStyle } from './types';
 import { t, Language } from './i18n';
 
+// FIX: Added missing getTtsPrompt function used for voice commands throughout the app.
+export const getTtsPrompt = (key: string, lang: Language, options?: { [key: string]: string | number }): string => t(lang, key, options);
+
 export const CLOUDINARY_CLOUD_NAME = "deeieh2bd";
 export const CLOUDINARY_UPLOAD_PRESET = "Voicebook";
 export const IMAGE_GENERATION_COST = 60;
@@ -134,16 +137,3 @@ export const MOCK_GALLERY_ITEMS: { id: string; type: 'image' | 'video'; url: str
     { id: 'gal5', type: 'image', url: 'https://picsum.photos/id/20/540/960' },
     { id: 'gal6', type: 'image', url: 'https://picsum.photos/id/30/540/960' },
 ];
-
-// FIX: Added missing getTtsPrompt function to resolve import errors.
-export const getTtsPrompt = (key: string, language: Language, options?: { [key: string]: string | number }): string => {
-    // This is a placeholder implementation to resolve build errors.
-    // In a real app, this would fetch prompts from a translation file.
-    let prompt = key.replace(/_/g, ' ');
-    if (options) {
-        for (const [k, v] of Object.entries(options)) {
-            prompt += ` ${k} ${v}`;
-        }
-    }
-    return prompt;
-};

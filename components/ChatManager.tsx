@@ -57,9 +57,7 @@ const ChatManager: React.FC<ChatManagerProps> = ({
             onHeaderClick={onMinimizeToggle}
             isMinimized={true}
             unreadCount={chatUnreadCounts[firebaseService.getChatId(currentUser.id, peer.id)] || 0}
-            setIsChatRecording={() => {}}
             onNavigate={onNavigate}
-            onSetTtsMessage={() => {}}
             onBlockUser={onBlockUser}
           />
         ))}
@@ -73,9 +71,7 @@ const ChatManager: React.FC<ChatManagerProps> = ({
             onHeaderClick={onMinimizeToggle}
             isMinimized={false}
             unreadCount={0}
-            setIsChatRecording={() => {}}
             onNavigate={onNavigate}
-            onSetTtsMessage={() => {}}
             onBlockUser={onBlockUser}
           />
         ))}
@@ -92,9 +88,7 @@ const ChatManager: React.FC<ChatManagerProps> = ({
                 onHeaderClick={onMinimizeToggle}
                 isMinimized={minimizedChats.has(peer.id)}
                 unreadCount={chatUnreadCounts[firebaseService.getChatId(currentUser.id, peer.id)] || 0}
-                setIsChatRecording={() => {}}
                 onNavigate={onNavigate}
-                onSetTtsMessage={() => {}}
                 onBlockUser={onBlockUser}
             />
          ))}

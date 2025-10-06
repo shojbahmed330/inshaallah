@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { AppView, User, Post, Comment, ScrollState, Notification, Campaign, Group, Story, Conversation, Call } from './types';
+import { AppView, User, Post, Comment, ScrollState, Notification, Campaign, Group, Story, Conversation, Call, VoiceState } from './types';
 import AuthScreen from './components/AuthScreen';
 import FeedScreen from './components/FeedScreen';
 import ExploreScreen from './components/ExploreScreen';
@@ -10,14 +10,15 @@ import { ProfileScreen } from './components/ProfileScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PostDetailScreen from './components/PostDetailScreen';
 import FriendsScreen from './components/FriendsScreen';
-import SearchResultsScreen from './components/SearchResultsScreen';
+// FIX: Changed to named import to resolve module error.
+import { SearchResultsScreen } from './components/SearchResultsScreen';
 import NotificationPanel from './components/NotificationPanel';
 import Sidebar from './components/Sidebar';
 import Icon from './components/Icon';
 import AdModal from './components/AdModal';
 import { geminiService } from './services/geminiService';
 import { firebaseService } from './services/firebaseService';
-import { IMAGE_GENERATION_COST, REWARD_AD_COIN_VALUE } from './constants';
+import { IMAGE_GENERATION_COST, REWARD_AD_COIN_VALUE, getTtsPrompt } from './constants';
 import ConversationsScreen from './components/ConversationsScreen';
 import AdsScreen from './components/AdsScreen';
 import CampaignViewerModal from './components/CampaignViewerModal';
@@ -48,11 +49,25 @@ import IncomingCallModal from './components/IncomingCallModal';
 import CallScreen from './components/CallScreen';
 import CommentSheet from './components/CommentSheet';
 import ReportModal from './components/ReportModal';
+import VoiceIndicator from './components/VoiceIndicator';
+
+// FIX: Add type definition for the non-standard SpeechRecognition API to resolve build errors.
+declare global {
+    interface Window {
+        SpeechRecognition: any;
+        webkitSpeechRecognition: any;
+    }
+}
 
 
 interface ViewState {
   view: AppView;
   props?: any;
+}
+
+interface CommandResponse {
+  intent: string;
+  slots?: { [key: string]: string | number };
 }
 
 interface CommentSheetState {
@@ -183,9 +198,19 @@ const UserApp: React.FC = () => {
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [commentSheetState, setCommentSheetState] = useState<CommentSheetState | null>(null);
   const [imageViewerInitialUrl, setImageViewerInitialUrl] = useState<string | null>(null);
+
+  // --- Voice Control State ---
+  const [voiceState, setVoiceState] = useState<VoiceState>(VoiceState.IDLE);
+  const [lastCommand, setLastCommand] = useState<string | null>(null);
+  const [lastCommandResponse, setLastCommandResponse] = useState<CommandResponse | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const [ttsMessage, setTtsMessage] = useState('');
   
   const userRef = useRef(user);
   userRef.current = user;
+  // FIX: Use `any` for SpeechRecognition ref to avoid type errors with non-standard browser APIs.
+  const recognitionRef = useRef<any | null>(null);
+  const commandTimeoutRef = useRef<number | null>(null);
   
   const activeChatsRef = useRef(activeChats);
   activeChatsRef.current = activeChats;
@@ -542,6 +567,145 @@ const UserApp: React.FC = () => {
         setViewStack([{ view: AppView.AUTH }]);
     }
   }, [user, isAuthLoading, currentView]);
+
+    const onCommandProcessed = useCallback(() => {
+        setLastCommand(null);
+        setLastCommandResponse(null);
+    }, []);
+
+    const handleCommand = useCallback(async (command: string) => {
+        setVoiceState(VoiceState.PROCESSING);
+        setTtsMessage(''); // Clear previous TTS
+        try {
+            const intentResponse = await geminiService.processIntent(command);
+            setLastCommand(command);
+            setLastCommandResponse(intentResponse);
+
+            // Handle global navigation immediately
+            switch(intentResponse.intent) {
+                case 'intent_open_feed': handleNavigation('feed'); break;
+                case 'intent_open_friends_page': handleNavigation('friends'); break;
+                case 'intent_open_messages': handleNavigation('messages'); break;
+                case 'intent_open_settings': handleNavigation('settings'); break;
+                case 'intent_open_profile':
+                    const targetName = intentResponse.slots?.target_name as string;
+                    if (targetName && (targetName.toLowerCase() === 'my' || targetName.toLowerCase() === 'amar')) {
+                         if (user) navigate(AppView.PROFILE, { username: user.username });
+                    } else if (targetName) {
+                        // Let profile screen handle specific user search
+                    } else {
+                        if (user) navigate(AppView.PROFILE, { username: user.username });
+                    }
+                    break;
+                case 'intent_go_back': goBack(); break;
+            }
+
+        } catch (error) {
+            console.error("Error processing intent:", error);
+            setTtsMessage(getTtsPrompt('error_generic', language));
+            onCommandProcessed();
+        } finally {
+            setVoiceState(VoiceState.PASSIVE_LISTENING);
+        }
+    }, [user, navigate, goBack, language, onCommandProcessed, handleNavigation]);
+
+    // --- Voice Recognition Effect ---
+    useEffect(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            console.warn("Speech Recognition not supported in this browser.");
+            setVoiceState(VoiceState.IDLE);
+            return;
+        }
+
+        if (!recognitionRef.current) {
+            recognitionRef.current = new SpeechRecognition();
+            recognitionRef.current.continuous = true;
+            recognitionRef.current.interimResults = true;
+            recognitionRef.current.lang = language === 'bn' ? 'bn-BD' : 'en-US';
+
+            recognitionRef.current.onstart = () => {
+                if(voiceState !== VoiceState.ACTIVE_LISTENING) setVoiceState(VoiceState.PASSIVE_LISTENING);
+            };
+
+            recognitionRef.current.onend = () => {
+                // The service might stop unexpectedly. Restart it unless we're in IDLE.
+                if (voiceState !== VoiceState.IDLE) {
+                    recognitionRef.current?.start();
+                }
+            };
+            
+            recognitionRef.current.onerror = (event: any) => {
+                console.error('Speech recognition error', event.error);
+                if (event.error === 'not-allowed') {
+                    setVoiceState(VoiceState.IDLE);
+                    setTtsMessage("Microphone access was denied. Voice control is disabled.");
+                }
+            };
+
+            recognitionRef.current.onresult = (event: any) => {
+                let finalTranscript = '';
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                
+                setInterimTranscript(interim);
+                const fullTranscript = (finalTranscript + interim).toLowerCase().trim();
+                
+                if (commandTimeoutRef.current) {
+                    clearTimeout(commandTimeoutRef.current);
+                }
+
+                if (voiceState === VoiceState.ACTIVE_LISTENING) {
+                     if (finalTranscript.trim()) {
+                        handleCommand(finalTranscript.trim());
+                     } else if(fullTranscript.trim()){
+                         commandTimeoutRef.current = window.setTimeout(() => {
+                             handleCommand(fullTranscript.trim());
+                         }, 1500); // Wait 1.5s for user to finish speaking
+                     }
+                } else { // Passive listening for hotword
+                    const hotwords = ['hey voicebook', 'voice book', 'hay voicebook', 'هেই ভয়েসবুক'];
+                    if (hotwords.some(hotword => fullTranscript.includes(hotword))) {
+                        setVoiceState(VoiceState.ACTIVE_LISTENING);
+                        setTtsMessage("Listening...");
+                        setInterimTranscript('');
+                    }
+                }
+            };
+        }
+        
+        // Start listening if user is logged in
+        if (user && voiceState === VoiceState.IDLE) {
+            try {
+                recognitionRef.current.start();
+            } catch (e) {
+                console.error("Could not start recognition:", e);
+            }
+        }
+        
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+                setVoiceState(VoiceState.IDLE);
+            }
+        };
+
+    }, [user, voiceState, language, handleCommand]);
+    
+    // --- Text-to-Speech Effect ---
+    useEffect(() => {
+        if (ttsMessage) {
+            const utterance = new SpeechSynthesisUtterance(ttsMessage);
+            utterance.lang = language === 'bn' ? 'bn-BD' : 'en-US';
+            window.speechSynthesis.speak(utterance);
+        }
+    }, [ttsMessage, language]);
 
   const handleCloseChat = useCallback((peerId: string) => {
       setActiveChats(prev => prev.filter(c => c.id !== peerId));
@@ -905,13 +1069,25 @@ const UserApp: React.FC = () => {
     if (isAuthLoading) {
         return <div className="flex items-center justify-center h-full text-fuchsia-400">Loading VoiceBook...</div>;
     }
+
+    // FIX: Pass `setTtsMessage` to `onSetTtsMessage` prop for child components.
+    const commonProps = {
+        lastCommand,
+        lastCommandResponse,
+        onCommandProcessed,
+        ttsMessage,
+        onSetTtsMessage: setTtsMessage,
+    };
+    
     if (!user) {
         return <AuthScreen 
+            {...commonProps}
             initialAuthError={globalAuthError}
         />;
     }
 
     const commonScreenProps = {
+      ...commonProps,
       currentUser: user,
       scrollState: scrollState,
       onSetScrollState: setScrollState,
@@ -926,6 +1102,7 @@ const UserApp: React.FC = () => {
     switch (currentView.view) {
       case AppView.AUTH:
         return <AuthScreen
+            {...commonProps}
             initialAuthError={globalAuthError}
         />;
       case AppView.FEED:
@@ -1008,6 +1185,7 @@ const UserApp: React.FC = () => {
                 {renderView()}
             </div>
         </main>
+        <VoiceIndicator voiceState={voiceState} interimTranscript={interimTranscript} />
       </div>
     );
   }
@@ -1133,6 +1311,8 @@ const UserApp: React.FC = () => {
           />
       )}
       
+      <VoiceIndicator voiceState={voiceState} interimTranscript={interimTranscript} />
+
       {isShowingAd && campaignForAd && (
         <AdModal campaign={campaignForAd} onComplete={handleAdComplete} onSkip={handleAdSkip} />
       )}

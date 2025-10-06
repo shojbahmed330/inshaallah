@@ -14,7 +14,6 @@ interface ChatWidgetProps {
   onHeaderClick: (peerId: string) => void;
   isMinimized: boolean;
   unreadCount: number;
-  setIsChatRecording: (isRecording: boolean) => void;
   onNavigate: (view: AppView, props?: any) => void;
   onBlockUser: (user: User) => void;
 }
@@ -193,7 +192,7 @@ const MessageBubble: React.FC<{
 };
 
 
-const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose, onMinimize, onHeaderClick, isMinimized, unreadCount, setIsChatRecording, onNavigate, onBlockUser }) => {
+const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose, onMinimize, onHeaderClick, isMinimized, unreadCount, onNavigate, onBlockUser }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -215,12 +214,6 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
 
   const chatId = firebaseService.getChatId(currentUser.id, peerUser.id);
   const activeTheme = CHAT_THEMES[settings.theme] || CHAT_THEMES.default;
-
-
-  useEffect(() => {
-    setIsChatRecording(recordingState === RecordingState.RECORDING);
-    return () => setIsChatRecording(false);
-  }, [recordingState, setIsChatRecording]);
 
   useEffect(() => {
     const unsubscribe = firebaseService.listenToMessages(chatId, setMessages);
