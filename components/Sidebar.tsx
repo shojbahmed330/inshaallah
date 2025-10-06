@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, AppView, VoiceState } from '../types';
+import { User, AppView } from '../types';
 import Icon from './Icon';
 
 interface SidebarProps {
