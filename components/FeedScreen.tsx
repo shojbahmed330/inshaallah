@@ -156,6 +156,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         
         const { intent, slots } = intentResponse;
 
+        const activePost = posts[currentPostIndex];
+
         switch (intent) {
           case 'intent_next_post':
             isProgrammaticScroll.current = true;
@@ -187,16 +189,36 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                 } else {
                     onSetTtsMessage(`I couldn't find a post by ${targetName} to like.`);
                 }
-            } else if (currentPostIndex !== -1 && posts[currentPostIndex] && !posts[currentPostIndex].isSponsored) {
-              onReactToPost(posts[currentPostIndex].id, '👍');
-              onSetTtsMessage(`Liked ${posts[currentPostIndex].author.name}'s post.`);
+            } else if (activePost && !activePost.isSponsored) {
+              onReactToPost(activePost.id, '👍');
+              onSetTtsMessage(`Liked ${activePost.author.name}'s post.`);
             }
             break;
           case 'intent_share':
-            if (currentPostIndex !== -1 && posts[currentPostIndex]) {
-                onSharePost(posts[currentPostIndex]);
+            if (activePost) {
+                onSharePost(activePost);
             } else {
                 onSetTtsMessage("Please select a post to share by playing it or navigating to it.");
+            }
+            break;
+          case 'intent_save_post':
+            if (activePost) {
+                onSavePost(activePost, true);
+            }
+            break;
+          case 'intent_hide_post':
+            if (activePost) {
+                onHidePost(activePost.id);
+            }
+            break;
+          case 'intent_copy_link':
+            if (activePost) {
+                onCopyLink(activePost);
+            }
+            break;
+          case 'intent_report_post':
+            if (activePost) {
+                onReportPost(activePost);
             }
             break;
           case 'intent_comment':
@@ -210,8 +232,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                 } else {
                     onSetTtsMessage(`I can't find a post by ${targetName} to view comments on.`);
                 }
-            } else if (currentPostIndex !== -1 && posts[currentPostIndex] && !posts[currentPostIndex].isSponsored) {
-                onOpenComments(posts[currentPostIndex]);
+            } else if (activePost && !activePost.isSponsored) {
+                onOpenComments(activePost);
             }
             break;
           case 'intent_add_text_to_story':
@@ -304,7 +326,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
     }
   }, [
       posts, currentPostIndex, friends, onOpenProfile, onReactToPost, onOpenComments, onSetTtsMessage, onStartCreatePost, 
-      onNavigate, onSetScrollState, setSearchResults, onCommandProcessed, fetchRewardedCampaign, onSharePost, language, currentUser
+      onNavigate, onSetScrollState, setSearchResults, onCommandProcessed, fetchRewardedCampaign, onSharePost, language, currentUser,
+      onSavePost, onHidePost, onCopyLink, onReportPost
   ]);
 
 

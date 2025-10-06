@@ -39,31 +39,77 @@ const HelpScreen: React.FC<HelpScreenProps> = ({ onGoBack }) => {
                     <CommandItem command="Open explore / এক্সপ্লোর" description="Goes to the explore page to discover new content." />
                     <CommandItem command="Show my profile / আমার প্রোফাইল" description="Opens your personal profile page." />
                     <CommandItem command="Open [Friend's Name]'s profile" description="Example: 'Open Shojib Khan's profile'." />
+                    <CommandItem command="Open groups / গ্রুপ পেজ" description="Navigates to the main groups hub." />
+                    <CommandItem command="Open rooms / রুম পেজ" description="Navigates to the live rooms hub." />
                     <CommandItem command="Go back / ফিরে যাও" description="Navigates to the previous screen." />
                     <CommandItem command="Open messages / মেসেজ দেখাও" description="Goes to your conversations screen." />
+                    <CommandItem command="Reload page / রিলোড কর" description="Refreshes the content on the current page." />
                 </CommandCategory>
                 
-                <CommandCategory title="Interactions">
+                <CommandCategory title="Feed & Content Interaction">
+                    <CommandItem command="Play post / প্লে কর" description="Plays the audio or video of the current post." />
+                    <CommandItem command="Pause post / পজ কর" description="Pauses the currently playing audio or video." />
+                    <CommandItem command="Next post / পরের পোস্টে যাও" description="Scrolls to and focuses on the next post in the feed." />
+                    <CommandItem command="Previous post / আগের পোস্টে যাও" description="Scrolls to the previous post." />
+                    <CommandItem command="Scroll down / নিচে যাও" description="Starts scrolling the page down continuously." />
+                    <CommandItem command="Scroll up / উপরে যাও" description="Starts scrolling the page up continuously." />
+                    <CommandItem command="Stop scroll / থামো" description="Stops the continuous scroll." />
                     <CommandItem command="Like this post / লাইক দাও" description="Likes the current post on screen." />
                     <CommandItem command="Comment on this post" description="Opens the comment section for the current post." />
                     <CommandItem command="Share this post / শেয়ার কর" description="Opens the sharing options for the current post." />
-                    <CommandItem command="Play post / প্লে কর" description="Plays the audio or video of the current post." />
-                    <CommandItem command="Next post / পরের পোস্টে যাও" description="Scrolls to and focuses on the next post in the feed." />
-                    <CommandItem command="Previous post / আগের পোস্টে যাও" description="Scrolls to the previous post." />
+                    <CommandItem command="Save this post / পোস্ট সেভ কর" description="Saves the current post to your 'Saved' list." />
+                    <CommandItem command="Hide this post / পোস্ট লুকাও" description="Hides the current post from your feed for this session." />
+                    <CommandItem command="Copy link / লিঙ্ক কপি কর" description="Copies the direct link of the current post to your clipboard." />
+                    <CommandItem command="Report post / রিপোর্ট কর" description="Opens the report dialog for the current post." />
                 </CommandCategory>
 
                 <CommandCategory title="Creating Content">
                     <CommandItem command="Create a new post / নতুন পোস্ট" description="Opens the screen to create a new post." />
                     <CommandItem command="Start a voice post / ভয়েস পোস্ট" description="Starts recording a new voice post immediately." />
                     <CommandItem command="Stop recording / রেকর্ডিং বন্ধ কর" description="Stops an ongoing voice recording." />
+                    <CommandItem command="Re-record / আবার রেকর্ড কর" description="Discards the current recording and starts a new one." />
                     <CommandItem command="Post it / পোস্ট কর" description="Confirms and publishes your created post or comment." />
+                    <CommandItem command="Generate an image of [prompt]" description="Example: 'Generate an image of a cat on a skateboard'." />
+                    <CommandItem command="Create a poll" description="Opens the poll creation interface in the post composer." />
+                    <CommandItem command="Create a story / স্টোরি বানাও" description="Opens the story creation screen." />
+                    <CommandItem command="Add text [your text] to story" description="Adds or replaces the text on a text story." />
+                    <CommandItem command="Add music / গান অ্যাড কর" description="Opens the music library for your story." />
+                    <CommandItem command="Set story privacy to friends" description="Changes who can see your story ('public' or 'friends')." />
+                    <CommandItem command="Post story / স্টোরি পোস্ট কর" description="Publishes your created story." />
                 </CommandCategory>
 
                  <CommandCategory title="Friends & Social">
                     <CommandItem command="Show my friends / আমার বন্ধুদের দেখাও" description="Navigates to your friends list." />
                     <CommandItem command="Show friend requests" description="Goes to the friend requests tab." />
-                    <CommandItem command="Add [Name] as friend" description="Sends a friend request to the specified user." />
+                    <CommandItem command="Add [Name] as friend" description="Sends a friend request to the specified user on their profile." />
                     <CommandItem command="Accept [Name]'s request" description="Accepts a pending friend request from a user." />
+                    <CommandItem command="Unfriend [Name]" description="Removes a user from your friends list (from their profile)." />
+                    <CommandItem command="Cancel request to [Name]" description="Cancels a friend request you sent." />
+                    <CommandItem command="Search for [Name]" description="Searches for a user on VoiceBook." />
+                </CommandCategory>
+                
+                <CommandCategory title="Groups">
+                    <CommandItem command="Create a group called [Name]" description="Starts the group creation process with a pre-filled name." />
+                    <CommandItem command="Search for [topic] groups" description="Searches for groups matching a topic." />
+                    <CommandItem command="Show me [Category] groups" description="Filters the group list by a category (e.g., 'Gaming', 'Food')." />
+                    <CommandItem command="Open [Group Name]" description="Navigates directly to a group you are a member of." />
+                    <CommandItem command="Join group" description="Joins the public group you are currently viewing." />
+                    <CommandItem command="Leave group" description="Leaves the group you are currently viewing." />
+                    <CommandItem command="Open group chat / চ্যাট" description="Opens the chat room for the current group." />
+                    <CommandItem command="View group events / ইভেন্ট" description="Opens the events page for the current group." />
+                    <CommandItem command="Manage group" description="Opens the management panel if you are an admin." />
+                </CommandCategory>
+
+                 <CommandCategory title="Settings & Profile">
+                    <CommandItem command="Open settings / সেটিংসে যাও" description="Navigates to the main settings page." />
+                    <CommandItem command="Change my name to [New Name]" description="Updates your name in the settings form." />
+                    <CommandItem command="Set my bio to [New Bio]" description="Updates your bio in the settings form." />
+                    <CommandItem command="Set post visibility to friends" description="Changes your default post privacy ('public' or 'friends')." />
+                    <CommandItem command="Turn off like notifications" description="Toggles a notification setting ('on' or 'off')." />
+                    <CommandItem command="Unblock [Name]" description="Unblocks a user from the settings page." />
+                    <CommandItem command="Change password" description="Opens the change password dialog." />
+                    <CommandItem command="Deactivate my account" description="Initiates the account deactivation process." />
+                    <CommandItem command="Save settings" description="Saves all changes made on the settings page." />
                 </CommandCategory>
 
             </div>

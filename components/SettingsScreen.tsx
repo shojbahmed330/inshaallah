@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from './Icon';
 import { User, ScrollState } from '../types';
@@ -111,15 +110,15 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSe
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer || scrollState === 'none') {
+    if (!scrollContainer || scrollState === ScrollState.NONE) {
         return;
     }
 
     let animationFrameId: number;
     const animateScroll = () => {
-        if (scrollState === 'down') {
+        if (scrollState === ScrollState.DOWN) {
             scrollContainer.scrollTop += 2;
-        } else if (scrollState === 'up') {
+        } else if (scrollState === ScrollState.UP) {
             scrollContainer.scrollTop -= 2;
         }
         animationFrameId = requestAnimationFrame(animateScroll);

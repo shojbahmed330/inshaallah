@@ -23,7 +23,7 @@ The JSON object must have:
 2. An optional "slots" object: For intents that require extra information (like a name or number).
 
 CONTEXTUAL RULES:
-- If a user says a simple action like "like", "comment", "share", or "open profile" without specifying a target name, assume they mean the currently active post on the screen. The app will handle the context. Your job is just to return the base intent (e.g., "intent_like").
+- If a user says a simple action like "like", "comment", "share", "save post", "hide post", "copy link", "report post" or "open profile" without specifying a target name, assume they mean the currently active post on the screen. The app will handle the context. Your job is just to return the base intent (e.g., "intent_like").
 - If the user says "my profile", "amar profile", or similar, the intent MUST be 'intent_open_profile' and there MUST NOT be a 'target_name' slot.
 - If a command is "next" or "previous", it could mean the next post in a feed, or the next image in a multi-image view. The app has context. You can use 'intent_next_post' for generic next commands, and 'intent_next_image' if the user explicitly says 'next image' or 'porer chobi'.
 
@@ -43,6 +43,15 @@ Your primary goal is to map various phrasings to the correct intent. Be flexible
 - "help", "ki ki command ache", "সাহায্য" -> "intent_help"
 - "amar profile" -> "intent_open_profile" (NO target_name)
 - "shojib er profile dekho" -> { "intent": "intent_open_profile", "slots": { "target_name": "shojib" } }
+- "save this post", "post ta save koro" -> "intent_save_post"
+- "hide this", "eta lukao" -> "intent_hide_post"
+- "copy link", "link ta copy koro" -> "intent_copy_link"
+- "report this post" -> "intent_report_post"
+- "create a group named Family", "Family name ekta group kholo" -> { "intent": "intent_create_group", "slots": { "group_name": "Family" } }
+- "open groups", "group gulo dekhao" -> "intent_open_groups_hub"
+- "create a story", "story banao" -> "intent_create_story"
+- "add music", "gaan add koro" -> "intent_add_music"
+- "post story", "story ta post koro" -> "intent_post_story"
 - "পাসওয়ার্ড পরিবর্তন কর" (change password) -> { "intent": "intent_change_password" }
 - "আমার অ্যাকাউন্ট নিষ্ক্রিয় কর" (deactivate my account) -> { "intent": "intent_deactivate_account" }
 - "সেটিংসে যাও" (go to settings) -> { "intent": "intent_open_settings" }
@@ -72,12 +81,18 @@ let NLU_INTENT_LIST = `
 - intent_select_result (extracts 'index')
 - intent_like (extracts 'target_name')
 - intent_share
+- intent_save_post
+- intent_hide_post
+- intent_copy_link
+- intent_report_post
 - intent_open_profile (extracts 'target_name')
 - intent_change_avatar
 - intent_help
 - intent_go_back
 - intent_open_settings
 - intent_add_friend (extracts 'target_name')
+- intent_unfriend_user (extracts 'target_name')
+- intent_cancel_friend_request (extracts 'target_name')
 - intent_send_message (extracts 'target_name')
 - intent_save_settings
 - intent_update_profile (extracts 'field', 'value')
@@ -132,7 +147,6 @@ let NLU_INTENT_LIST = `
 - intent_create_group (extracts 'group_name')
 - intent_search_group (extracts 'search_query')
 - intent_filter_groups_by_category (extracts 'category_name')
-- intent_invite_to_group (extracts 'target_name')
 - intent_view_group_suggestions
 - intent_pin_post
 - intent_unpin_post
@@ -155,8 +169,6 @@ let NLU_INTENT_LIST = `
 - intent_react_to_last_message (extracts 'emoji_type')
 - intent_unsend_message
 - intent_send_announcement (extracts 'message_content')
-- intent_unfriend_user (extracts 'target_name')
-- intent_cancel_friend_request (extracts 'target_name')
 `;
 
 // Define a schema for the Post object to be returned by Gemini

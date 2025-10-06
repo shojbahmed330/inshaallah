@@ -396,8 +396,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     try {
         const context = { userNames: [profileUser.name] };
         const intentResponse = await geminiService.processIntent(command, context);
+        const { intent, slots } = intentResponse;
         
-        switch (intentResponse.intent) {
+        const activePost = posts[currentPostIndex];
+
+        switch (intent) {
           case 'intent_add_friend':
             if (profileUser.id !== currentUser.id && friendshipStatus === FriendshipStatus.NOT_FRIENDS) {
                 handleAddFriendAction();
@@ -418,6 +421,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 handleCancelRequest();
             }
             break;
+        case 'intent_save_post':
+            if (activePost) onSavePost(activePost, true);
+            break;
+        case 'intent_hide_post':
+            if (activePost) onHidePost(activePost.id);
+            break;
+        case 'intent_copy_link':
+            if (activePost) onCopyLink(activePost);
+            break;
+        case 'intent_report_post':
+            if (activePost) onReportPost(activePost);
+            break;
         }
     } catch (error) {
         console.error("Error processing command in ProfileScreen:", error);
@@ -425,7 +440,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     } finally {
         onCommandProcessed();
     }
-  }, [profileUser, currentUser.id, onCommandProcessed, onSetTtsMessage, language, handleAddFriendAction, friendshipStatus, handleRespondToRequest, handleUnfriend, handleCancelRequest]);
+  }, [profileUser, currentUser.id, onCommandProcessed, onSetTtsMessage, language, handleAddFriendAction, friendshipStatus, handleRespondToRequest, handleUnfriend, handleCancelRequest, posts, currentPostIndex, onSavePost, onHidePost, onCopyLink, onReportPost]);
 
   useEffect(() => {
     if (lastCommand) {
