@@ -171,6 +171,7 @@ const UserApp: React.FC = () => {
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
   const [isLoadingReels, setIsLoadingReels] = useState(true);
   const [commandInputValue, setCommandInputValue] = useState('');
+  const [isVoiceTranscript, setIsVoiceTranscript] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [navigateToGroupId, setNavigateToGroupId] = useState<string | null>(null);
   const [initialDeepLink, setInitialDeepLink] = useState<ViewState | null>(null);
@@ -640,11 +641,24 @@ const UserApp: React.FC = () => {
 
     recognition.onresult = (event: any) => {
       const command = event.results[0][0].transcript;
-      handleCommand(command);
+      setCommandInputValue(command);
+      setIsVoiceTranscript(true);
     };
 
     recognition.start();
-  }, [voiceState, handleCommand, language, isChatRecording]);
+  }, [voiceState, language, isChatRecording]);
+
+  useEffect(() => {
+    if (isVoiceTranscript && commandInputValue) {
+      // Automatically submit after a short delay for user feedback
+      const timer = setTimeout(() => {
+        handleCommand(commandInputValue);
+        setIsVoiceTranscript(false); // Reset for the next voice command
+      }, 750);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isVoiceTranscript, commandInputValue, handleCommand]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
