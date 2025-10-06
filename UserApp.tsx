@@ -60,6 +60,7 @@ interface ViewState {
 interface CommentSheetState {
     post: Post;
     commentToReplyTo?: Comment;
+    initialText?: string;
 }
 
 const MenuItem: React.FC<{
@@ -589,23 +590,18 @@ const UserApp: React.FC = () => {
   }, []);
 
   const correctAndSubmit = useCallback(async (rawTranscript: string) => {
+    setVoiceState(VoiceState.PROCESSING);
+    setTtsMessage("Correcting transcript...");
     try {
-        setTtsMessage("Correcting transcript...");
         const correctedText = await geminiService.correctTranscript(rawTranscript);
-        setCommandInputValue(correctedText);
-
-        setTimeout(() => {
-            handleCommand(correctedText);
-        }, 750);
+        handleCommand(correctedText);
 
     } catch (error) {
         console.error("Error correcting transcript:", error);
         setTtsMessage("Correction failed. Using original text.");
-        setTimeout(() => {
-            handleCommand(rawTranscript);
-        }, 750);
+        handleCommand(rawTranscript);
     }
-  }, [handleCommand, setTtsMessage, setCommandInputValue]);
+  }, [handleCommand]);
 
   const handleMicClick = useCallback(() => {
     if (isChatRecording) {
@@ -679,7 +675,7 @@ const UserApp: React.FC = () => {
     };
 
     recognition.start();
-  }, [voiceState, language, isChatRecording, correctAndSubmit, setVoiceState, setTtsMessage, setCommandInputValue]);
+  }, [voiceState, language, isChatRecording, correctAndSubmit]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -890,9 +886,9 @@ const UserApp: React.FC = () => {
     }
   };
   
-  const handleOpenComments = (post: Post, commentToReplyTo?: Comment) => {
+  const handleOpenComments = (post: Post, commentToReplyTo?: Comment, initialText?: string) => {
     handleClosePhotoViewer();
-    setCommentSheetState({ post, commentToReplyTo });
+    setCommentSheetState({ post, commentToReplyTo, initialText });
   };
   
   const handleReactToPost = async (postId: string, emoji: string) => {
@@ -1407,6 +1403,9 @@ const UserApp: React.FC = () => {
             onOpenPhotoViewer={handleOpenPhotoViewer}
             onReportPost={handleReportPost}
             onReportComment={handleReportComment}
+            initialText={commentSheetState.initialText}
+            lastCommand={lastCommand}
+            onCommandProcessed={handleCommandProcessed}
         />
       )}
       {!isFullScreenView && (

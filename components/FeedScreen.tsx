@@ -5,7 +5,7 @@ import CreatePostWidget from './CreatePostWidget';
 import SkeletonPostCard from './SkeletonPostCard';
 import { geminiService } from '../services/geminiService';
 import RewardedAdWidget from './RewardedAdWidget';
-import { getTtsPrompt } from '../constants';
+import { getTtsPrompt, VOICE_EMOJI_MAP } from '../constants';
 import StoriesTray from './StoriesTray';
 import { firebaseService } from '../services/firebaseService';
 import { useSettings } from '../contexts/SettingsContext';
@@ -17,7 +17,7 @@ interface FeedScreenProps {
   onSetTtsMessage: (message: string) => void;
   lastCommand: string | null;
   onOpenProfile: (userName: string) => void;
-  onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
+  onOpenComments: (post: Post, commentToReplyTo?: Comment, initialText?: string) => void;
   onReactToPost: (postId: string, emoji: string) => void;
   onStartCreatePost: (props?: any) => void;
   onRewardedAdClick: (campaign: Campaign) => void;
@@ -156,21 +156,21 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         
         const { intent, slots } = intentResponse;
 
-        const activePost = posts[currentPostIndex];
+        const activePost = visiblePosts[currentPostIndex];
 
         switch (intent) {
           case 'intent_next_post':
             isProgrammaticScroll.current = true;
-            setCurrentPostIndex(prev => (prev < 0 ? 0 : (prev + 1) % posts.length));
+            setCurrentPostIndex(prev => (prev < 0 ? 0 : (prev + 1) % visiblePosts.length));
             setIsPlaying(true);
             break;
           case 'intent_previous_post':
             isProgrammaticScroll.current = true;
-            setCurrentPostIndex(prev => (prev > 0 ? prev - 1 : posts.length - 1));
+            setCurrentPostIndex(prev => (prev > 0 ? prev - 1 : visiblePosts.length - 1));
             setIsPlaying(true);
             break;
           case 'intent_play_post':
-            if (currentPostIndex === -1 && posts.length > 0) {
+            if (currentPostIndex === -1 && visiblePosts.length > 0) {
                 isProgrammaticScroll.current = true;
                 setCurrentPostIndex(0);
             }
@@ -179,17 +179,16 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
           case 'intent_pause_post':
             setIsPlaying(false);
             break;
-          case 'intent_like':
-            if (slots?.target_name) {
-                const targetName = slots.target_name as string;
-                const postToLike = posts.find(p => !p.isSponsored && p.author.name === targetName);
-                if (postToLike) {
-                    onReactToPost(postToLike.id, '👍');
-                    onSetTtsMessage(`Liked ${postToLike.author.name}'s post.`);
-                } else {
-                    onSetTtsMessage(`I couldn't find a post by ${targetName} to like.`);
-                }
-            } else if (activePost && !activePost.isSponsored) {
+          case 'intent_react_to_post':
+            if (activePost && slots?.reaction_type) {
+                const reactionKey = (slots.reaction_type as string).toLowerCase();
+                const emoji = VOICE_EMOJI_MAP[reactionKey] || '👍'; // Default to like
+                onReactToPost(activePost.id, emoji);
+                onSetTtsMessage(`Reacted with ${emoji} to ${activePost.author.name}'s post.`);
+            }
+            break;
+          case 'intent_like': // Legacy support
+            if (activePost && !activePost.isSponsored) {
               onReactToPost(activePost.id, '👍');
               onSetTtsMessage(`Liked ${activePost.author.name}'s post.`);
             }
@@ -221,12 +220,23 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                 onReportPost(activePost);
             }
             break;
+          case 'intent_add_comment_text':
+            if (activePost && slots?.comment_text) {
+                onOpenComments(activePost, undefined, slots.comment_text as string);
+                onSetTtsMessage(`Comment text added. Say 'post comment' to publish.`);
+            }
+            break;
+          case 'intent_open_post_viewer':
+            if (activePost) {
+                onOpenPhotoViewer(activePost);
+            }
+            break;
           case 'intent_comment':
           case 'intent_view_comments':
           case 'intent_view_comments_by_author':
             if (slots?.target_name) {
                 const targetName = slots.target_name as string;
-                const postToView = posts.find(p => !p.isSponsored && p.author.name === targetName);
+                const postToView = visiblePosts.find(p => !p.isSponsored && p.author.name === targetName);
                 if (postToView) {
                     onOpenComments(postToView);
                 } else {
@@ -325,9 +335,9 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         onCommandProcessed();
     }
   }, [
-      posts, currentPostIndex, friends, onOpenProfile, onReactToPost, onOpenComments, onSetTtsMessage, onStartCreatePost, 
+      visiblePosts, currentPostIndex, friends, onOpenProfile, onReactToPost, onOpenComments, onSetTtsMessage, onStartCreatePost, 
       onNavigate, onSetScrollState, setSearchResults, onCommandProcessed, fetchRewardedCampaign, onSharePost, language, currentUser,
-      onSavePost, onHidePost, onCopyLink, onReportPost
+      onSavePost, onHidePost, onCopyLink, onReportPost, onOpenPhotoViewer
   ]);
 
 
@@ -338,7 +348,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
   }, [lastCommand, handleCommand]);
 
   useEffect(() => {
-    if (isInitialLoad.current || posts.length === 0 || currentPostIndex < 0 || !isProgrammaticScroll.current) return;
+    if (isInitialLoad.current || visiblePosts.length === 0 || currentPostIndex < 0 || !isProgrammaticScroll.current) return;
 
     const cardElement = postRefs.current[currentPostIndex];
     if (cardElement) {
@@ -349,16 +359,16 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         
         return () => clearTimeout(scrollTimeout);
     }
-  }, [currentPostIndex, posts]);
+  }, [currentPostIndex, visiblePosts]);
 
   useEffect(() => {
-    if (isInitialLoad.current || posts.length === 0 || currentPostIndex < 0) return;
+    if (isInitialLoad.current || visiblePosts.length === 0 || currentPostIndex < 0) return;
     
-    const activePost = posts[currentPostIndex];
+    const activePost = visiblePosts[currentPostIndex];
     if (activePost?.isSponsored && activePost.campaignId) {
         onAdViewed(activePost.campaignId);
     }
-  }, [currentPostIndex, posts, onAdViewed]);
+  }, [currentPostIndex, visiblePosts, onAdViewed]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -397,7 +407,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
             if (ref) observer.unobserve(ref);
         });
     };
-  }, [posts]);
+  }, [visiblePosts]);
 
 
   useEffect(() => {

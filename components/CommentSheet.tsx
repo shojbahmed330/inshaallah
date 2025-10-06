@@ -6,6 +6,8 @@ import { firebaseService } from '../services/firebaseService';
 import Icon from './Icon';
 import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
+// FIX: Import geminiService to handle marking the best answer.
+import { geminiService } from '../services/geminiService';
 
 interface CommentSheetProps {
   initialPost: Post;
@@ -14,7 +16,7 @@ interface CommentSheetProps {
   onClose: () => void;
   onReactToPost: (postId: string, emoji: string) => void;
   onReactToComment: (postId: string, commentId: string, emoji: string) => void;
-  onPostComment: (postId: string, text: string, parentId?: string | null) => Promise<void>;
+  onPostComment: (postId: string, text: string, parentId?: string | null, imageId?: string) => Promise<void>;
   onEditComment: (postId: string, commentId: string, newText: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onReportPost: (post: Post) => void;
@@ -22,6 +24,9 @@ interface CommentSheetProps {
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
+  initialText?: string;
+  lastCommand: string | null;
+  onCommandProcessed: () => void;
 }
 
 const CommentSheet: React.FC<CommentSheetProps> = ({
@@ -38,18 +43,18 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
   onSharePost,
   onOpenPhotoViewer,
   onReportPost,
-  onReportComment
+  onReportComment,
+  initialText,
+  lastCommand,
+  onCommandProcessed,
 }) => {
   const [post, setPost] = useState<Post | null>(initialPost);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [playingCommentId, setPlayingCommentId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<Comment | null>(commentToReplyTo || null);
-  const [newCommentText, setNewCommentText] = useState('');
+  const [newCommentText, setNewCommentText] = useState(initialText || '');
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   
-  const [isPostMenuOpen, setPostMenuOpen] = useState(false);
-  const postMenuRef = useRef<HTMLDivElement>(null);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const { language } = useSettings();
 
@@ -71,8 +76,10 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
         setNewCommentText(`@${replyingTo.author.username} `);
     } else if (commentToReplyTo) {
         setReplyingTo(commentToReplyTo);
+    } else if (initialText) {
+        commentInputRef.current?.focus();
     }
-  }, [replyingTo, commentToReplyTo]);
+  }, [replyingTo, commentToReplyTo, initialText]);
 
   const commentsToDisplay = useMemo(() => {
     if (!post?.comments) return [];
@@ -110,7 +117,17 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
     setPlayingCommentId(prev => prev === comment.id ? null : comment.id);
   }, []);
   
-  const handlePostCommentSubmit = async (e: React.FormEvent) => {
+  const handleMarkBestAnswer = async (commentId: string) => {
+    if (!post || post.author.id !== currentUser.id) return;
+    const updatedPost = await geminiService.markBestAnswer(currentUser.id, post.id, commentId);
+    if (updatedPost) {
+        // onSetTtsMessage is not passed as a prop, but if it were, this would work.
+        // For now, the optimistic update from the listener will handle UI change.
+        // onSetTtsMessage("Best answer marked!");
+    }
+  };
+  
+  const handlePostCommentSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!post || !newCommentText.trim() || isPostingComment) return;
     setIsPostingComment(true);
@@ -123,7 +140,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
     } finally {
       setIsPostingComment(false);
     }
-  };
+  }, [post, newCommentText, isPostingComment, onPostComment, replyingTo]);
 
   const CommentWithReplies: React.FC<{ comment: Comment & { replies: Comment[] }, isReply?: boolean }> = ({ comment, isReply = false }) => (
     <div className="flex flex-col gap-3">
@@ -155,7 +172,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-center items-end animate-fade-in-fast" onClick={handleClose}>
       <div 
-        className={`bg-slate-900 w-full max-w-2xl h-[68vh] rounded-t-2xl flex flex-col ${isClosing ? 'animate-slide-out-to-bottom' : 'animate-slide-in-from-bottom'}`}
+        className={`bg-slate-900 w-full max-w-2xl h-[85vh] md:h-[90vh] rounded-t-2xl flex flex-col ${isClosing ? 'animate-slide-out-to-bottom' : 'animate-slide-in-from-bottom'}`}
         onClick={e => e.stopPropagation()}
       >
         <header className="flex-shrink-0 p-4 border-b border-slate-700/50 flex items-center justify-center relative">
@@ -169,31 +186,26 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
         <div className="flex-grow overflow-y-auto">
             {post ? (
                 <div className="flex flex-col gap-6 p-4">
-                    {/* Simplified Post Header */}
-                    <div className="flex items-center justify-between">
-                        <button onClick={() => onOpenProfile(post.author.username)} className="flex items-center text-left group">
-                            <img src={post.author.avatarUrl} alt={post.author.name} className="w-12 h-12 rounded-full mr-4"/>
-                            <div>
-                                <p className="font-bold text-fuchsia-300 text-lg group-hover:underline">{post.author.name}</p>
-                                <p className="text-fuchsia-500 text-sm">{new Date(post.createdAt).toLocaleDateString()}</p>
-                            </div>
-                        </button>
-                        {post.author.id !== currentUser.id && (
-                            <div className="relative" ref={postMenuRef}>
-                                <button onClick={() => setPostMenuOpen(p => !p)}>
-                                    <Icon name="ellipsis-vertical" className="w-6 h-6 text-slate-400" />
-                                </button>
-                                {isPostMenuOpen && (
-                                    <div className="absolute top-full right-0 mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 text-sm font-semibold">
-                                        <button onClick={() => { onReportPost(post); setPostMenuOpen(false); }} className="w-full text-left px-4 py-2 text-yellow-400 hover:bg-yellow-500/10">Report Post</button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                    <div className="border-b border-slate-700/50 pb-4">
+                        <PostCard
+                            post={post}
+                            currentUser={currentUser}
+                            isActive={true}
+                            isPlaying={isPlaying}
+                            onPlayPause={() => setIsPlaying(p => !p)}
+                            onReact={onReactToPost}
+                            onOpenComments={() => {}} // Already open
+                            onAuthorClick={onOpenProfile}
+                            onSharePost={onSharePost}
+                            onOpenPhotoViewer={onOpenPhotoViewer}
+                            onDeletePost={onDeletePost}
+                            onReportPost={onReportPost}
+                            isSaved={currentUser.savedPostIds?.includes(post.id)}
+                            onSavePost={(post, isSaving) => { /* handle save if needed */ }}
+                            onCopyLink={(post) => { /* handle copy if needed */ }}
+                            onHidePost={(postId) => { /* handle hide if needed */ }}
+                        />
                     </div>
-                    {post.caption && <p className="text-slate-200">{post.caption}</p>}
-                    
-                    <div className="border-t border-slate-700/50" />
                     
                     <div className="flex flex-col gap-4">
                         {commentThreads.length > 0 ? commentThreads.map(comment => (
@@ -224,7 +236,7 @@ const CommentSheet: React.FC<CommentSheetProps> = ({
                     onChange={(e) => setNewCommentText(e.target.value)}
                     placeholder="Write a comment..."
                     className="flex-grow bg-slate-800 border border-slate-700 text-slate-100 rounded-full py-2.5 px-4 focus:ring-fuchsia-500 focus:border-fuchsia-500"
-                    autoFocus={!!commentToReplyTo}
+                    autoFocus={!!commentToReplyTo || !!initialText}
                 />
                  <button type="submit" className="p-2.5 rounded-full bg-fuchsia-600 text-white hover:bg-fuchsia-500 disabled:bg-slate-500" disabled={!newCommentText.trim() || isPostingComment}>
                     <Icon name="paper-airplane" className="w-5 h-5" />

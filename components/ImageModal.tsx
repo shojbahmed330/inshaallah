@@ -23,7 +23,7 @@ interface ImageModalProps {
   onReportComment: (comment: Comment) => void;
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
-  onOpenCommentsSheet: (post: Post) => void;
+  onOpenCommentsSheet: (post: Post, commentToReplyTo?: Comment, initialText?: string) => void;
   lastCommand?: string | null;
   onCommandProcessed?: () => void;
 }
@@ -71,26 +71,61 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
     setCurrentIndex(i => (i === allImages.length - 1 ? 0 : i + 1));
   }, [allImages.length]);
 
-  const handleCommand = useCallback((command: string) => {
-      if (!onCommandProcessed) return;
+  const handlePostCommentSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!post || !newCommentText.trim() || isPostingComment) return;
+    const imageIdForComment = isMultiImagePost ? currentImageDetail?.id : undefined;
+    setIsPostingComment(true);
+    try {
+        await onPostComment(post.id, newCommentText, replyingTo?.id || null, imageIdForComment);
+        setNewCommentText('');
+        setReplyingTo(null);
+    } catch (error) {
+        console.error("Failed to post comment:", error);
+    } finally {
+        setIsPostingComment(false);
+    }
+  }, [post, newCommentText, isPostingComment, isMultiImagePost, currentImageDetail, onPostComment, replyingTo]);
 
-      geminiService.processIntent(command).then(response => {
-          if (response.intent === 'intent_next_image' || response.intent === 'intent_next_post') {
-              handleNext();
-          } else if (response.intent === 'intent_previous_image' || response.intent === 'intent_previous_post') {
-              handlePrev();
-          } else if (response.intent === 'intent_go_back') {
-              onClose();
-          }
-          onCommandProcessed();
-      });
-  }, [onCommandProcessed, handleNext, handlePrev, onClose]);
 
   useEffect(() => {
-      if (lastCommand) {
-          handleCommand(lastCommand);
-      }
-  }, [lastCommand, handleCommand]);
+    const handleCommand = async () => {
+        if (!lastCommand || !onCommandProcessed) return;
+
+        try {
+            const intentResponse = await geminiService.processIntent(lastCommand);
+            switch (intentResponse.intent) {
+                case 'intent_next_image':
+                case 'intent_next_post':
+                    handleNext();
+                    break;
+                case 'intent_previous_image':
+                case 'intent_previous_post':
+                    handlePrev();
+                    break;
+                case 'intent_go_back':
+                    onClose();
+                    break;
+                case 'intent_add_comment_to_image':
+                    if (intentResponse.slots?.comment_text) {
+                        setNewCommentText(intentResponse.slots.comment_text as string);
+                        commentInputRef.current?.focus();
+                    }
+                    break;
+                case 'intent_post_comment':
+                    if (newCommentText.trim()) {
+                        handlePostCommentSubmit({ preventDefault: () => {} } as React.FormEvent);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error("Error processing command in ImageModal:", error);
+        } finally {
+            onCommandProcessed();
+        }
+    };
+    handleCommand();
+  }, [lastCommand, onCommandProcessed, handleNext, handlePrev, onClose, newCommentText, handlePostCommentSubmit]);
 
 
   useEffect(() => {
@@ -157,22 +192,6 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
   const handlePlayComment = (comment: Comment) => {
     if (comment.type !== 'audio') return;
     setPlayingCommentId(prev => prev === comment.id ? null : comment.id);
-  };
-  
-  const handlePostCommentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!post || !newCommentText.trim() || isPostingComment) return;
-    const imageIdForComment = isMultiImagePost ? currentImageDetail?.id : undefined;
-    setIsPostingComment(true);
-    try {
-        await onPostComment(post.id, newCommentText, replyingTo?.id || null, imageIdForComment);
-        setNewCommentText('');
-        setReplyingTo(null);
-    } catch (error) {
-        console.error("Failed to post comment:", error);
-    } finally {
-        setIsPostingComment(false);
-    }
   };
   
   const handleMouseEnterPicker = () => {
