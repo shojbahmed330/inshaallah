@@ -47,7 +47,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
   const getFabClass = () => {
     let base = "w-full text-white font-bold text-lg py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2";
     switch (voiceState) {
-        case VoiceState.LISTENING:
+        // FIX: Replaced non-existent 'LISTENING' with 'ACTIVE_LISTENING'.
+        case VoiceState.ACTIVE_LISTENING:
             return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
         case VoiceState.PROCESSING:
             return `${base} bg-yellow-600 cursor-not-allowed`;
@@ -60,7 +61,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
     switch (voiceState) {
         case VoiceState.PROCESSING:
             return <Icon name="logo" className="w-6 h-6 animate-spin" />;
-        case VoiceState.LISTENING:
+        // FIX: Replaced non-existent 'LISTENING' with 'ACTIVE_LISTENING'.
+        case VoiceState.ACTIVE_LISTENING:
         default:
             return <Icon name="mic" className="w-6 h-6" />;
     }
@@ -70,7 +72,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
     switch (voiceState) {
         case VoiceState.PROCESSING:
             return "Processing...";
-        case VoiceState.LISTENING:
+        // FIX: Replaced non-existent 'LISTENING' with 'ACTIVE_LISTENING'.
+        case VoiceState.ACTIVE_LISTENING:
             return "Listening...";
         default:
             return "Voice Command";

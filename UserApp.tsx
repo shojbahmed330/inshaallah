@@ -656,6 +656,19 @@ const UserApp: React.FC = () => {
               
               case 'intent_go_back': goBack(); setTtsMessage("Going back."); break;
               case 'intent_reload_page': window.location.reload(); break;
+              
+              case 'intent_scroll_down':
+                  if (mainContentRef.current) {
+                      mainContentRef.current.scrollBy({ top: window.innerHeight * 0.7, behavior: 'smooth' });
+                  }
+                  setTtsMessage("Scrolling down.");
+                  break;
+              case 'intent_scroll_up':
+                  if (mainContentRef.current) {
+                      mainContentRef.current.scrollBy({ top: -window.innerHeight * 0.7, behavior: 'smooth' });
+                  }
+                  setTtsMessage("Scrolling up.");
+                  break;
   
               case 'intent_create_voice_post': handleStartCreatePost({ startRecording: true }); setTtsMessage("Starting a new voice post."); break;
               case 'intent_create_photo_post': handleStartCreatePost({ selectMedia: 'image' }); setTtsMessage("Select a photo for your post."); break;
@@ -1346,9 +1359,6 @@ const UserApp: React.FC = () => {
           friendRequestCount={friendRequestCount}
           activeView={currentView.view}
           voiceCoins={user.voiceCoins || 0}
-          voiceState={voiceState}
-          onMicClick={handleMicClick}
-          isChatRecording={isChatRecording}
         />
       )}
       
@@ -1535,9 +1545,6 @@ const UserApp: React.FC = () => {
             onNavigate={handleNavigation}
             friendRequestCount={friendRequestCount}
             activeView={currentView.view}
-            voiceState={voiceState}
-            onMicClick={handleMicClick}
-            isChatRecording={isChatRecording}
         />
       )}
     </div>

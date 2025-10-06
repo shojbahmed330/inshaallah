@@ -1,14 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { AppView, VoiceState } from '../types';
+import React from 'react';
+import { AppView } from '../types';
 import Icon from './Icon';
 
 interface MobileBottomNavProps {
     onNavigate: (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'profile' | 'messages' | 'rooms' | 'groups' | 'menu') => void;
     friendRequestCount: number;
     activeView: AppView;
-    voiceState: VoiceState;
-    onMicClick: () => void;
-    isChatRecording: boolean;
 }
 
 const NavItem: React.FC<{
@@ -39,65 +36,7 @@ const NavItem: React.FC<{
 
 
 const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
-    const { onNavigate, friendRequestCount, activeView, voiceState, onMicClick, isChatRecording } = props;
-    
-    // State for Draggable FAB
-    const fabRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 160 });
-    const dragStartRef = useRef({ x: 0, y: 0 });
-    const hasMovedRef = useRef(false);
-
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        hasMovedRef.current = false;
-        const touch = e.touches[0];
-        dragStartRef.current = {
-            x: touch.clientX - position.x,
-            y: touch.clientY - position.y,
-        };
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        hasMovedRef.current = true;
-        const touch = e.touches[0];
-        const fabElement = fabRef.current;
-        if (!fabElement) return;
-
-        const rect = fabElement.getBoundingClientRect();
-        let newX = touch.clientX - dragStartRef.current.x;
-        let newY = touch.clientY - dragStartRef.current.y;
-
-        // Clamp position to be within the viewport
-        newX = Math.max(8, Math.min(newX, window.innerWidth - rect.width - 8));
-        newY = Math.max(8, Math.min(newY, window.innerHeight - rect.height - 8));
-
-        setPosition({ x: newX, y: newY });
-    };
-
-    const handleFabClick = () => {
-        if (hasMovedRef.current) {
-            hasMovedRef.current = false; // Reset after a drag to allow next tap
-            return;
-        }
-        onMicClick();
-    };
-
-    const getFabClass = () => {
-        let base = "w-16 h-16 rounded-full text-white shadow-lg flex items-center justify-center transition-all duration-300 transform hover:scale-105";
-        if (isChatRecording) {
-          return `${base} bg-slate-500 cursor-not-allowed`;
-        }
-        switch (voiceState) {
-            case VoiceState.ACTIVE_LISTENING:
-                return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
-            case VoiceState.PROCESSING:
-                return `${base} bg-yellow-600 cursor-not-allowed`;
-            case VoiceState.PASSIVE_LISTENING:
-                 return `${base} bg-gradient-to-br from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 animate-slow-pulse`;
-            default: // IDLE
-                return `${base} bg-gradient-to-br from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500`;
-        }
-    };
+    const { onNavigate, friendRequestCount, activeView } = props;
     
     return (
         <>
@@ -133,24 +72,6 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
                     isActive={activeView === AppView.MOBILE_MENU}
                     onClick={() => onNavigate('menu')}
                 />
-            </div>
-
-            {/* Command FAB */}
-            <div 
-                ref={fabRef}
-                className="fixed z-50 md:hidden touch-none"
-                style={{ top: `${position.y}px`, left: `${position.x}px` }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-            >
-                <button
-                  onClick={handleFabClick}
-                  disabled={voiceState === VoiceState.PROCESSING || isChatRecording}
-                  className={getFabClass()}
-                  aria-label="Toggle Voice Command"
-                >
-                  <Icon name="mic" className="w-8 h-8"/>
-                </button>
             </div>
         </>
     );

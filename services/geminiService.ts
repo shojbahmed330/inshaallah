@@ -27,7 +27,7 @@ If the user's intent is unclear or not in the list, you MUST use the intent "unk
 **COMMAND EXAMPLES (English, Bangla, Banglish):**
 
 - **Navigation:**
-  - "go to my profile", "amar profile dekhao" -> {"intent": "intent_open_my_profile"}
+  - "go to my profile", "amar profile dekhao", "amar profile a jao" -> {"intent": "intent_open_my_profile"}
   - "open messages", "message e jao" -> {"intent": "intent_open_messages"}
   - "show me my friends list", "amar bondhuder dekhao" -> {"intent": "intent_open_friends_page"}
   - "go back", "pichone jao" -> {"intent": "intent_go_back"}
@@ -47,7 +47,7 @@ If the user's intent is unclear or not in the list, you MUST use the intent "unk
   - "make a group called Family", "Family nam e group kholo" -> {"intent": "intent_create_group", "slots": {"group_name": "Family"}}
 
 - **Scrolling:**
-  - "scroll down", "niche jao" -> {"intent": "intent_scroll_down"}
+  - "scroll down", "niche jao", "scroll koro" -> {"intent": "intent_scroll_down"}
   - "scroll up", "upore jao" -> {"intent": "intent_scroll_up"}
   - "stop scrolling" -> {"intent": "intent_stop_scroll"}
 
