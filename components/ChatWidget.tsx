@@ -16,7 +16,6 @@ interface ChatWidgetProps {
   unreadCount: number;
   setIsChatRecording: (isRecording: boolean) => void;
   onNavigate: (view: AppView, props?: any) => void;
-  onSetTtsMessage: (message: string) => void;
   onBlockUser: (user: User) => void;
 }
 
@@ -194,7 +193,7 @@ const MessageBubble: React.FC<{
 };
 
 
-const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose, onMinimize, onHeaderClick, isMinimized, unreadCount, setIsChatRecording, onNavigate, onSetTtsMessage, onBlockUser }) => {
+const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose, onMinimize, onHeaderClick, isMinimized, unreadCount, setIsChatRecording, onNavigate, onBlockUser }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -333,7 +332,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
         onNavigate(AppView.CALL_SCREEN, { callId, peerUser, isCaller: true });
     } catch (error: any) {
         console.error(`Failed to get media permissions for ${type} call:`, error);
-        onSetTtsMessage("Call failed: Microphone/camera permission was denied.");
+        alert("Call failed: Microphone/camera permission was denied.");
     }
   };
 

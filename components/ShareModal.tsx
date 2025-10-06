@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Post } from '../types';
 import Icon from './Icon';
@@ -6,7 +5,6 @@ import Icon from './Icon';
 interface ShareModalProps {
   post: Post;
   onClose: () => void;
-  onSetTtsMessage: (message: string) => void;
 }
 
 const SocialButton: React.FC<{ href: string; children: React.ReactNode; bgColor: string }> = ({ href, children, bgColor }) => (
@@ -21,7 +19,7 @@ const SocialButton: React.FC<{ href: string; children: React.ReactNode; bgColor:
 );
 
 
-const ShareModal: React.FC<ShareModalProps> = ({ post, onClose, onSetTtsMessage }) => {
+const ShareModal: React.FC<ShareModalProps> = ({ post, onClose }) => {
     const [copyText, setCopyText] = useState('Copy');
     const postUrl = `${window.location.origin}${window.location.pathname}#/post/${post.id}`;
     
@@ -32,10 +30,9 @@ const ShareModal: React.FC<ShareModalProps> = ({ post, onClose, onSetTtsMessage 
     const handleCopy = () => {
         navigator.clipboard.writeText(postUrl).then(() => {
             setCopyText('Copied!');
-            onSetTtsMessage('Link copied to clipboard!');
             setTimeout(() => setCopyText('Copy'), 2000);
         }).catch(() => {
-            onSetTtsMessage('Failed to copy link.');
+            alert('Failed to copy link.');
         });
     };
 

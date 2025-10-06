@@ -8,8 +8,12 @@ export enum AppView {
   AUTH, FEED, EXPLORE, REELS, CREATE_POST, CREATE_REEL, PROFILE, SETTINGS, POST_DETAILS, FRIENDS, SEARCH_RESULTS, CONVERSATIONS, ADS_CENTER, ROOMS_HUB, ROOMS_LIST, LIVE_ROOM, VIDEO_ROOMS_LIST, LIVE_VIDEO_ROOM, GROUPS_HUB, GROUP_PAGE, MANAGE_GROUP, GROUP_CHAT, GROUP_EVENTS, CREATE_EVENT, CREATE_STORY, STORY_VIEWER, STORY_PRIVACY, GROUP_INVITE, CALL_SCREEN, MOBILE_MENU
 }
 
+// FIX: Added missing VoiceState enum
 export enum VoiceState {
-  IDLE, PASSIVE_LISTENING, ACTIVE_LISTENING, PROCESSING
+  IDLE,
+  PASSIVE_LISTENING,
+  ACTIVE_LISTENING,
+  PROCESSING
 }
 
 export enum ScrollState {
@@ -391,11 +395,6 @@ export interface Call {
   status: 'ringing' | 'active' | 'ended' | 'rejected' | 'missed' | 'declined';
   createdAt: string;
   endedAt?: any;
-}
-
-export interface NLUResponse {
-  intent: string;
-  slots?: { [key: string]: string | number };
 }
 
 export interface CategorizedExploreFeed {

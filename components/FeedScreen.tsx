@@ -5,7 +5,6 @@ import CreatePostWidget from './CreatePostWidget';
 import SkeletonPostCard from './SkeletonPostCard';
 import { geminiService } from '../services/geminiService';
 import RewardedAdWidget from './RewardedAdWidget';
-import { getTtsPrompt, VOICE_EMOJI_MAP } from '../constants';
 import StoriesTray from './StoriesTray';
 import { firebaseService } from '../services/firebaseService';
 import { useSettings } from '../contexts/SettingsContext';
@@ -14,8 +13,6 @@ interface FeedScreenProps {
   isLoading: boolean;
   posts: Post[];
   currentUser: User;
-  onSetTtsMessage: (message: string) => void;
-  lastCommand: string | null;
   onOpenProfile: (userName: string) => void;
   onOpenComments: (post: Post, commentToReplyTo?: Comment) => void;
   onReactToPost: (postId: string, emoji: string) => void;
@@ -27,8 +24,6 @@ interface FeedScreenProps {
   onOpenPhotoViewer: (post: Post, initialUrl?: string) => void;
   onDeletePost: (postId: string) => void;
   onReportPost: (post: Post) => void;
-  
-  onCommandProcessed: () => void;
   scrollState: ScrollState;
   onSetScrollState: (state: ScrollState) => void;
   onNavigate: (view: AppView, props?: any) => void;
@@ -41,9 +36,9 @@ interface FeedScreenProps {
 }
 
 const FeedScreen: React.FC<FeedScreenProps> = ({
-    isLoading, posts: initialPosts, currentUser, onSetTtsMessage, lastCommand, onOpenProfile,
+    isLoading, posts: initialPosts, currentUser, onOpenProfile,
     onOpenComments, onReactToPost, onStartCreatePost, onRewardedAdClick, onAdViewed,
-    onAdClick, onCommandProcessed, scrollState, onSetScrollState, onNavigate, friends, setSearchResults,
+    onAdClick, scrollState, onSetScrollState, onNavigate, friends, setSearchResults,
     onSharePost, onOpenPhotoViewer, onDeletePost, onReportPost, hiddenPostIds, onHidePost, onSavePost, onCopyLink
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
@@ -96,12 +91,6 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
   }, [currentUser]);
 
   useEffect(() => {
-    if (!isLoading && posts.length > 0 && isInitialLoad.current) {
-      onSetTtsMessage(getTtsPrompt('feed_loaded', language));
-    }
-  }, [posts.length, isLoading, onSetTtsMessage, language]);
-  
-  useEffect(() => {
     if (!isLoading) {
         fetchRewardedCampaign();
         fetchStories();
@@ -147,110 +136,6 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
         cancelAnimationFrame(animationFrameId);
     };
   }, [scrollState]);
-  
-  const handleCommand = useCallback(async (command: string) => {
-    try {
-        const userNamesOnScreen = posts.map(p => p.isSponsored ? p.sponsorName as string : p.author.name);
-        const allContextNames = [...userNamesOnScreen, ...friends.map(f => f.name)];
-        const intentResponse = await geminiService.processIntent(command, { userNames: [...new Set(allContextNames)] });
-        
-        const { intent, slots } = intentResponse;
-
-        // This component only handles context-specific commands
-        let commandHandled = true;
-        switch (intent) {
-          case 'intent_next_post':
-            isProgrammaticScroll.current = true;
-            setCurrentPostIndex(prev => (prev < 0 ? 0 : (prev + 1) % posts.length));
-            setIsPlaying(true);
-            break;
-          case 'intent_previous_post':
-            isProgrammaticScroll.current = true;
-            setCurrentPostIndex(prev => (prev > 0 ? prev - 1 : posts.length - 1));
-            setIsPlaying(true);
-            break;
-          case 'intent_play_post':
-            if (currentPostIndex === -1 && posts.length > 0) {
-                isProgrammaticScroll.current = true;
-                setCurrentPostIndex(0);
-            }
-            setIsPlaying(true);
-            break;
-          case 'intent_pause_post':
-            setIsPlaying(false);
-            break;
-          case 'intent_react_to_post':
-            const reaction = VOICE_EMOJI_MAP[slots?.reaction_type as string] || '👍';
-            if (slots?.target_name) {
-                const targetName = (slots.target_name as string).toLowerCase();
-                const postToLike = posts.find(p => !p.isSponsored && p.author.name.toLowerCase() === targetName);
-                if (postToLike) {
-                    onReactToPost(postToLike.id, reaction);
-                    onSetTtsMessage(`Reacted to ${postToLike.author.name}'s post.`);
-                } else {
-                    onSetTtsMessage(`I couldn't find a post by ${targetName} to react to.`);
-                }
-            } else if (currentPostIndex !== -1 && posts[currentPostIndex] && !posts[currentPostIndex].isSponsored) {
-              onReactToPost(posts[currentPostIndex].id, reaction);
-            }
-            break;
-          case 'intent_share_post':
-            if (currentPostIndex !== -1 && posts[currentPostIndex]) {
-                onSharePost(posts[currentPostIndex]);
-            } else {
-                onSetTtsMessage("Please select a post to share by playing it or navigating to it.");
-            }
-            break;
-          case 'intent_comment_on_post':
-          case 'intent_open_comments':
-            const targetName = slots?.target_name as string;
-            const postToView = targetName 
-                ? posts.find(p => !p.isSponsored && p.author.name.toLowerCase() === targetName.toLowerCase())
-                : (currentPostIndex !== -1 ? posts[currentPostIndex] : null);
-
-            if (postToView && !postToView.isSponsored) {
-                onOpenComments(postToView);
-            } else if (targetName) {
-                onSetTtsMessage(`I can't find a post by ${targetName} to view comments on.`);
-            }
-            break;
-          case 'intent_scroll_down':
-              if (feedContainerRef.current) {
-                  feedContainerRef.current.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' });
-              }
-              break;
-          case 'intent_scroll_up':
-              if (feedContainerRef.current) {
-                  feedContainerRef.current.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' });
-              }
-              break;
-          case 'intent_help':
-              onSetTtsMessage(getTtsPrompt('feed_loaded', language));
-              break;
-          default:
-              commandHandled = false;
-              break;
-        }
-        
-        if (commandHandled) {
-            onCommandProcessed();
-        }
-    } catch (error) {
-        console.error("Error processing command in FeedScreen:", error);
-        onSetTtsMessage(getTtsPrompt('error_generic', language));
-        onCommandProcessed();
-    }
-  }, [
-      posts, currentPostIndex, friends, onOpenProfile, onReactToPost, onOpenComments, onSetTtsMessage,
-      onCommandProcessed, language, onSharePost
-  ]);
-
-
-  useEffect(() => {
-    if (lastCommand) {
-      handleCommand(lastCommand);
-    }
-  }, [lastCommand, handleCommand]);
 
   useEffect(() => {
     if (isInitialLoad.current || posts.length === 0 || currentPostIndex < 0 || !isProgrammaticScroll.current) return;
