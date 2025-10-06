@@ -289,7 +289,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
               onSetScrollState(ScrollState.NONE);
               break;
           case 'intent_help':
-              onSetTtsMessage(getTtsPrompt('feed_loaded', language));
+              onNavigate(AppView.HELP);
+              onSetTtsMessage("Opening the command list.");
               break;
           default:
               onSetTtsMessage(getTtsPrompt('error_generic', language));

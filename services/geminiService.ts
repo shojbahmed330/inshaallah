@@ -27,20 +27,29 @@ CONTEXTUAL RULES:
 - If the user says "my profile", "amar profile", or similar, the intent MUST be 'intent_open_profile' and there MUST NOT be a 'target_name' slot.
 - If a command is "next" or "previous", it could mean the next post in a feed, or the next image in a multi-image view. The app has context. You can use 'intent_next_post' for generic next commands, and 'intent_next_image' if the user explicitly says 'next image' or 'porer chobi'.
 
-If the user's intent is unclear or not in the list, you MUST use the intent "unknown".
-
-Example Bengali/Banglish commands:
+BENGALI & BANGLISH EXAMPLES:
+Your primary goal is to map various phrasings to the correct intent. Be flexible with synonyms and phrasings.
+- "home page e jao", "amar feed dekhao", "news feed", "প্রথম পাতা" -> "intent_open_feed"
+- "like koro", "bhalo legeche", "লাইক" -> "intent_like"
+- "comment koro", "montobbo koro", "একটা মন্তব্য কর" -> "intent_comment"
+- "share koro", "শেয়ার" -> "intent_share"
+- "post koro", "kichu likho", "নতুন পোস্ট" -> "intent_create_post"
+- "amar bondhuder list dekhao", "friends list", "আমার বন্ধু" -> "intent_open_friends_page"
+- "message dekhao", "inbox a jao", "মেসেজ" -> "intent_open_messages"
+- "explore page", "explore koro", "এক্সপ্লোর" -> "intent_open_explore"
+- "scroll koro", "niche jao" -> "intent_scroll_down"
+- "upore jao" -> "intent_scroll_up"
+- "thamo", "stop scroll" -> "intent_stop_scroll"
+- "help", "ki ki command ache", "সাহায্য" -> "intent_help"
+- "amar profile" -> "intent_open_profile" (NO target_name)
+- "shojib er profile dekho" -> { "intent": "intent_open_profile", "slots": { "target_name": "shojib" } }
 - "পাসওয়ার্ড পরিবর্তন কর" (change password) -> { "intent": "intent_change_password" }
 - "আমার অ্যাকাউন্ট নিষ্ক্রিয় কর" (deactivate my account) -> { "intent": "intent_deactivate_account" }
 - "সেটিংসে যাও" (go to settings) -> { "intent": "intent_open_settings" }
-- "ফিডে যাও" (go to feed) -> { "intent": "intent_open_feed" }
 - "রুমে যাও" (go to rooms) -> { "intent": "intent_open_rooms_hub" }
 - "shojib ke khojo" (search for shojib) -> { "intent": "intent_search_user", "slots": { "target_name": "shojib" } }
-- "এই পোস্টে লাইক দাও" (like this post) -> { "intent": "intent_like" }
-- "পরের পোস্টে যাও" (go to next post) -> { "intent": "intent_next_post" }
-- "আমার প্রোফাইল খোলো" (open my profile) -> { "intent": "intent_open_profile" }
-- "add text Fine" -> { "intent": "intent_add_text_to_story", "slots": { "text": "Fine" } }
-- "পরের ছবি" (next picture) -> { "intent": "intent_next_image" }
+
+If the user's intent is unclear or not in the list, you MUST use the intent "unknown".
 `;
 
 let NLU_INTENT_LIST = `
@@ -245,6 +254,44 @@ export const geminiService = {
     }
   },
 
+  async correctTranscript(rawText: string): Promise<string> {
+    const systemInstruction = `You are an expert transcriber and translator. Your primary task is to correct a raw voice-to-text transcript into proper Bengali (Bangla) script. The input text might be in 'Banglish' (Bengali words spelled phonetically with English letters), a mix of English and Bengali words, or contain speech recognition errors.
+
+Your rules are:
+1.  Your output MUST be ONLY the corrected Bengali text. Do not add any explanation, preamble, or markdown.
+2.  If the input is primarily English, return it as is, but correct any obvious spelling mistakes.
+3.  Preserve proper nouns (like names of people or places) and common English technical terms (like 'Facebook', 'profile', 'post') as they are, using English letters.
+4.  Focus on converting phonetic Banglish into the correct Bengali script.
+
+Examples:
+- Input: "amar profile dekhao" -> Output: "amar profile দেখাও"
+- Input: "shojib khan er new post ta dekhi" -> Output: "Shojib Khan er new post টা দেখি"
+- Input: "create a new post" -> Output: "create a new post"
+- Input: "explore page a jao" -> Output: "explore page এ যাও"
+- Input: "settings change koro" -> Output: "settings change কর"
+- Input: "home page" -> Output: "home page"
+`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Correct the following transcript: "${rawText}"`,
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.1, // Be precise
+        },
+      });
+
+      const correctedText = response.text.trim();
+      // Sometimes Gemini might still wrap it in quotes
+      return correctedText.replace(/^"|"$/g, '');
+    } catch (error) {
+      console.error("Error correcting transcript with Gemini:", error);
+      // Fallback to the original text if AI fails
+      return rawText;
+    }
+  },
+
   // --- Friends ---
   getFriendRequests: (userId: string): Promise<User[]> => firebaseService.getFriendRequests(userId),
   acceptFriendRequest: (currentUserId: string, requestingUserId: string) => firebaseService.acceptFriendRequest(currentUserId, requestingUserId),
@@ -383,6 +430,89 @@ export const geminiService = {
     }
   },
   
+// FIX: Added missing 'getCategorizedExploreFeed' function.
+async getCategorizedExploreFeed(userId: string): Promise<CategorizedExploreFeed> {
+    // This is a new function to fulfill what ExploreScreen expects.
+    // It fetches public posts and uses Gemini to sort them into categories.
+    const posts = await firebaseService.getExplorePosts(userId);
+
+    if (posts.length === 0) {
+        return { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
+    }
+
+    // To save tokens and for efficiency, we send a simplified version of posts to the AI.
+    const simplifiedPosts = posts.map(p => ({
+        id: p.id,
+        caption: p.caption,
+        type: p.audioUrl ? 'audio' : (p.videoUrl ? 'video' : 'image/text'),
+        reactionCount: Object.keys(p.reactions || {}).length,
+        commentCount: p.commentCount || 0,
+        createdAt: p.createdAt,
+    }));
+
+    const systemInstruction = `You are a social media content curator for VoiceBook. Your task is to categorize a list of posts into predefined categories based on the provided JSON data. The user ID of the person browsing is ${userId}.
+    
+    Categories are:
+    - trending: Posts with high engagement (reactionCount, commentCount) that are very recent.
+    - forYou: Posts personalized for the user. Since you don't have user history, base this on a variety of interesting, high-quality content that is likely to be engaging. Create a good mix of content types.
+    - recent: The most recently created posts, based on the 'createdAt' field.
+    - funnyVoiceNotes: Audio posts ('type': 'audio') where the caption suggests humor.
+    - newTalent: Posts from users who might be new or have less content but are showing promise. You don't have user data, so just pick some interesting posts that are not already top trending.
+
+    You will receive a JSON array of simplified post objects. You MUST return a single, valid JSON object with keys corresponding to the categories. Each key's value should be an array of post IDs (strings) belonging to that category. A post can appear in multiple categories. Ensure you return some posts in each category if possible, but don't force it if none fit. Prioritize 'trending' and 'forYou' to be well-populated. Limit each category to a maximum of 10 post IDs.
+    `;
+    
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            trending: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of post IDs for trending content." },
+            forYou: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of post IDs for personalized content." },
+            recent: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of post IDs for recent content." },
+            funnyVoiceNotes: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of post IDs for funny voice notes." },
+            newTalent: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of post IDs for new talent." },
+        },
+        required: ["trending", "forYou", "recent", "funnyVoiceNotes", "newTalent"]
+    };
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: JSON.stringify(simplifiedPosts),
+            config: {
+                systemInstruction: systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: responseSchema,
+            },
+        });
+
+        const jsonString = response.text.trim();
+        const categorizedIds = JSON.parse(jsonString);
+
+        const postsById = new Map(posts.map(p => [p.id, p]));
+        
+        const result: CategorizedExploreFeed = {
+            trending: (categorizedIds.trending || []).map((id: string) => postsById.get(id)).filter(Boolean),
+            forYou: (categorizedIds.forYou || []).map((id: string) => postsById.get(id)).filter(Boolean),
+            recent: (categorizedIds.recent || []).map((id: string) => postsById.get(id)).filter(Boolean),
+            funnyVoiceNotes: (categorizedIds.funnyVoiceNotes || []).map((id: string) => postsById.get(id)).filter(Boolean),
+            newTalent: (categorizedIds.newTalent || []).map((id: string) => postsById.get(id)).filter(Boolean),
+        };
+        return result;
+
+    } catch (error) {
+        console.error("Error categorizing explore feed with Gemini:", error);
+        // Fallback to simple local categorization if AI fails
+        const sortedByReactions = posts.slice().sort((a, b) => Object.keys(b.reactions || {}).length - Object.keys(a.reactions || {}).length);
+        return {
+            trending: sortedByReactions.slice(0, 10),
+            forYou: posts.slice(0, 10).sort(() => 0.5 - Math.random()), // Shuffle
+            recent: posts.slice(0, 10), // Assumes posts are already sorted by date desc
+            funnyVoiceNotes: posts.filter(p => p.audioUrl && p.caption?.toLowerCase().match(/funny|lol|haha|😂/)).slice(0, 10),
+            newTalent: sortedByReactions.slice(10, 20), // Grab some that aren't top trending
+        };
+    }
+  },
+
   // Music Library (Mock)
   getMusicLibrary(): MusicTrack[] {
       return MOCK_MUSIC_LIBRARY;
@@ -551,87 +681,180 @@ export const geminiService = {
     rejectJoinRequest: (groupId: string, userId: string) => firebaseService.rejectJoinRequest(groupId, userId),
     approvePost: (postId: string) => firebaseService.approvePost(postId),
     rejectPost: (postId: string) => firebaseService.rejectPost(postId),
-    async getCategorizedExploreFeed(userId: string): Promise<CategorizedExploreFeed> {
-        const posts = await firebaseService.getExplorePosts(userId);
-        if (posts.length === 0) {
-            return { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
-        }
+    joinGroup: async (userId: string, groupId: string, answers?: string[]): Promise<boolean> => {
+         const groupRef = doc(db, 'groups', groupId);
+         const user = await firebaseService.getUserProfileById(userId);
+         if (!user) return false;
+         const memberObject = { id: user.id, name: user.name, username: user.username, avatarUrl: user.avatarUrl };
+         const groupDoc = await getDoc(groupRef);
+         if (!groupDoc.exists()) return false;
+         const group = groupDoc.data() as Group;
 
-        const postsById = new Map(posts.map(p => [p.id, p]));
-        
-        const lightweightPosts = posts.map(p => {
-            const { comments, reactions, ...rest } = p;
-            return {
-                ...rest,
-                reactionCount: Object.keys(reactions || {}).length,
-            };
-        });
-
-        const systemInstruction = `You are a social media content curator for VoiceBook. You will be given a list of posts in JSON format. Your task is to categorize these posts into the following categories: 'trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent'. Return a single JSON object with keys corresponding to these categories, and the values should be an array of the original post objects that fit into that category. A post can appear in multiple categories if it fits. 
-        
-        CRITICAL INSTRUCTIONS FOR 'forYou' CATEGORY:
-        1.  Create a diverse and engaging feed. It should be a MIX of content types: image posts, short videos (posts with a 'videoUrl'), and interesting audio notes.
-        2.  AVOID showing too many posts with a postType of 'profile_picture_change' or 'cover_photo_change'. Do not let these dominate the feed. Prefer posts with original content.
-        3.  Prioritize content that is visually appealing or has good engagement (reactionCount, commentCount) but is different from the main 'trending' category.
-
-        General Rules:
-        - 'trending' should be based on high engagement (reactionCount/commentCount).
-        - 'recent' are the 5-10 most recent posts based on their 'createdAt' timestamp.
-        - 'funnyVoiceNotes' are audio posts that seem humorous from their caption.
-        - 'newTalent' are posts from newer users or with unique content.`;
-
+         if (group.privacy === 'public') {
+             await updateDoc(groupRef, {
+                 members: arrayUnion(memberObject),
+                 memberIds: arrayUnion(user.id),
+                 memberCount: increment(1)
+             });
+             const userRef = doc(db, 'users', userId);
+             await updateDoc(userRef, { groupIds: arrayUnion(groupId) });
+         } else {
+             const request = { user: memberObject, answers: answers || [] };
+             await updateDoc(groupRef, { joinRequests: arrayUnion(request) });
+             const admins = group.admins || [group.creator];
+             for (const admin of admins) {
+                 await _createNotification(admin.id, 'group_join_request', user, { groupId, groupName: group.name });
+             }
+         }
+         return true;
+    },
+    async getAgoraToken(channelName: string, uid: string | number): Promise<string | null> {
+        const TOKEN_SERVER_URL = '/api/proxy';
         try {
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: `Here are the posts to categorize: ${JSON.stringify(lightweightPosts)}`,
-                config: {
-                    systemInstruction,
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            trending: { type: Type.ARRAY, items: postSchemaProperties },
-                            forYou: { type: Type.ARRAY, items: postSchemaProperties },
-                            recent: { type: Type.ARRAY, items: postSchemaProperties },
-                            funnyVoiceNotes: { type: Type.ARRAY, items: postSchemaProperties },
-                            newTalent: { type: Type.ARRAY, items: postSchemaProperties },
-                        },
-                        required: ['trending', 'forYou', 'recent', 'funnyVoiceNotes', 'newTalent']
-                    }
-                },
-            });
-
-            const jsonString = response.text.trim();
-            const categorizedLightweightFeed = JSON.parse(jsonString);
-
-            const rehydratedFeed: CategorizedExploreFeed = { trending: [], forYou: [], recent: [], funnyVoiceNotes: [], newTalent: [] };
-            for (const category of Object.keys(rehydratedFeed)) {
-                if (categorizedLightweightFeed[category]) {
-                    rehydratedFeed[category] = categorizedLightweightFeed[category]
-                        .map((lightPost: Post) => postsById.get(lightPost.id))
-                        .filter((p: Post | undefined): p is Post => !!p);
-                }
-            }
-            return rehydratedFeed;
-            
+            const response = await fetch(`${TOKEN_SERVER_URL}?channelName=${channelName}&uid=${uid}`);
+            if (!response.ok) throw new Error(`Token server responded with ${response.status}`);
+            const data = await response.json();
+            return data.rtcToken;
         } catch (error) {
-            console.error("Failed to parse categorized feed from Gemini:", error);
-            // Fallback to a simple categorization if Gemini fails
-            return {
-                trending: posts.slice(0, 5),
-                forYou: posts.slice(5, 10),
-                recent: posts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
-                funnyVoiceNotes: [],
-                newTalent: [],
-            };
+            console.error("Could not fetch Agora token.", error);
+            return null;
         }
     },
+    listenToUserGroups(userId: string, callback: (groups: Group[]) => void): () => void {
+        let groupsUnsubscribe = () => {};
+        const userUnsubscribe = onSnapshot(doc(db, 'users', userId), (userDoc) => {
+            groupsUnsubscribe(); // Cleanup previous groups listener
     
-    // --- 1-on-1 Calls ---
-    createCall: (caller, callee, chatId, type) => firebaseService.createCall(caller, callee, chatId, type),
-    listenForIncomingCalls: (userId, callback) => firebaseService.listenForIncomingCalls(userId, callback),
-    listenToCall: (callId, callback) => firebaseService.listenToCall(callId, callback),
-    updateCallStatus: (callId, status) => firebaseService.updateCallStatus(callId, status),
+            if (userDoc.exists()) {
+                const groupIds = userDoc.data().groupIds || [];
+                if (groupIds.length > 0) {
+                    const q = query(collection(db, 'groups'), where(documentId(), 'in', groupIds));
+                    groupsUnsubscribe = onSnapshot(q, (groupsSnapshot) => {
+                        const groups = groupsSnapshot.docs.map(d => {
+                            const data = d.data();
+                            return {
+                                id: d.id,
+                                ...data,
+                                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+                            } as Group;
+                        });
+                        callback(groups);
+                    }, (error) => {
+                        console.warn("Could not fetch user's groups by ID list due to permissions.", error.message);
+                        callback([]);
+                    });
+                } else {
+                    callback([]); // User is in no groups
+                }
+            } else {
+                callback([]); // User document doesn't exist
+            }
+        }, (error) => {
+            console.warn("Could not fetch user's groups due to permissions or data inconsistency.", error.message);
+            callback([]);
+        });
+    
+        // Return a function that unsubscribes from both listeners
+        return () => {
+            userUnsubscribe();
+            groupsUnsubscribe();
+        };
+    },
 
-    getAgoraToken: (channelName: string, uid: string | number) => firebaseService.getAgoraToken(channelName, uid),
+    listenToGroup(groupId: string, callback: (group: Group | null) => void): () => void {
+        const groupRef = doc(db, 'groups', groupId);
+        return onSnapshot(groupRef, (doc) => {
+            if (doc.exists()) {
+                const data = doc.data();
+                callback({
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+                } as Group);
+            } else {
+                callback(null);
+            }
+        }, (error) => {
+            console.error(`Error listening to group ${groupId}:`, error);
+            callback(null);
+        });
+    },
+
+    listenToPostsForGroup(groupId: string, callback: (posts: Post[]) => void): () => void {
+        const postsRef = collection(db, 'posts');
+        const q = query(postsRef, where('groupId', '==', groupId), where('status', '==', 'approved'), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const posts = snapshot.docs.map(docToPost);
+            callback(posts);
+        }, (error) => {
+            console.error(`Error listening to posts for group ${groupId}:`, error);
+            callback([]); // Return empty array on error
+        });
+    },
+
+    listenToGroupChat(groupId: string, callback: (chat: GroupChat | null) => void): () => void {
+        const chatRef = doc(db, 'groupChats', groupId);
+        return onSnapshot(chatRef, (doc) => {
+            if (doc.exists()) {
+                const data = doc.data();
+                callback({
+                    groupId: doc.id,
+                    messages: (data.messages || []).map((msg: any) => ({
+                        ...msg,
+                        createdAt: msg.createdAt instanceof Timestamp ? msg.createdAt.toDate().toISOString() : msg.createdAt,
+                    })),
+                } as GroupChat);
+            } else {
+                console.log(`Group chat for ${groupId} not found, creating it.`);
+                setDoc(chatRef, { messages: [] })
+                    .then(() => {
+                         callback({ groupId, messages: [] });
+                    })
+                    .catch(err => {
+                        console.error("Failed to auto-create group chat:", err);
+                        callback(null);
+                    });
+            }
+        }, (error) => {
+            console.error(`Error listening to group chat ${groupId}:`, error);
+            callback(null);
+        });
+    },
+    
+    async reactToGroupChatMessage(groupId: string, messageId: string, userId: string, emoji: string): Promise<void> {
+        const chatRef = doc(db, 'groupChats', groupId);
+        await runTransaction(db, async (transaction) => {
+            const chatDoc = await transaction.get(chatRef);
+            if (!chatDoc.exists()) throw "Chat does not exist!";
+            const messages = chatDoc.data().messages || [];
+            const msgIndex = messages.findIndex((m: any) => m.id === messageId);
+            if (msgIndex === -1) throw "Message not found!";
+    
+            const message = messages[msgIndex];
+            const reactions = message.reactions || {};
+            const previousReaction = Object.keys(reactions).find(key => reactions[key].includes(userId));
+    
+            if (previousReaction) {
+                reactions[previousReaction] = reactions[previousReaction].filter((id: string) => id !== userId);
+            }
+    
+            if (previousReaction !== emoji) {
+                if (!reactions[emoji]) {
+                    reactions[emoji] = [];
+                }
+                reactions[emoji].push(userId);
+            }
+            
+            for (const key in reactions) {
+                if (reactions[key].length === 0) {
+                    delete reactions[key];
+                }
+            }
+            
+            message.reactions = reactions;
+            messages[msgIndex] = message;
+    
+            transaction.update(chatRef, { messages });
+        });
+    },
 };

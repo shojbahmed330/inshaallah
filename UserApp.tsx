@@ -49,6 +49,7 @@ import IncomingCallModal from './components/IncomingCallModal';
 import CallScreen from './components/CallScreen';
 import CommentSheet from './components/CommentSheet';
 import ReportModal from './components/ReportModal';
+import HelpScreen from './components/HelpScreen';
 
 
 interface ViewState {
@@ -128,6 +129,11 @@ const MobileMenuScreen: React.FC<{
                         label="Rooms" 
                         onClick={() => onNavigate(AppView.ROOMS_HUB)}
                     />
+                    <MenuItem 
+                        iconName="question-mark-circle" 
+                        label="Help & Commands" 
+                        onClick={() => onNavigate(AppView.HELP)}
+                    />
                 </div>
 
                 <div className="mt-8 border-t border-gray-200 pt-4">
@@ -171,7 +177,6 @@ const UserApp: React.FC = () => {
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
   const [isLoadingReels, setIsLoadingReels] = useState(true);
   const [commandInputValue, setCommandInputValue] = useState('');
-  const [isVoiceTranscript, setIsVoiceTranscript] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [navigateToGroupId, setNavigateToGroupId] = useState<string | null>(null);
   const [initialDeepLink, setInitialDeepLink] = useState<ViewState | null>(null);
@@ -583,6 +588,25 @@ const UserApp: React.FC = () => {
     setVoiceState(VoiceState.IDLE);
   }, []);
 
+  const correctAndSubmit = useCallback(async (rawTranscript: string) => {
+    try {
+        setTtsMessage("Correcting transcript...");
+        const correctedText = await geminiService.correctTranscript(rawTranscript);
+        setCommandInputValue(correctedText);
+
+        setTimeout(() => {
+            handleCommand(correctedText);
+        }, 750);
+
+    } catch (error) {
+        console.error("Error correcting transcript:", error);
+        setTtsMessage("Correction failed. Using original text.");
+        setTimeout(() => {
+            handleCommand(rawTranscript);
+        }, 750);
+    }
+  }, [handleCommand, setTtsMessage, setCommandInputValue]);
+
   const handleMicClick = useCallback(() => {
     if (isChatRecording) {
       setTtsMessage("In-chat voice message is currently recording.");
@@ -609,9 +633,9 @@ const UserApp: React.FC = () => {
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
 
-    recognition.lang = 'bn-BD, en-US';
+    recognition.lang = 'bn-BD';
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
@@ -640,25 +664,22 @@ const UserApp: React.FC = () => {
     };
 
     recognition.onresult = (event: any) => {
-      const command = event.results[0][0].transcript;
-      setCommandInputValue(command);
-      setIsVoiceTranscript(true);
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+          transcript += event.results[i][0].transcript;
+      }
+      setCommandInputValue(transcript);
+
+      if (event.results[event.results.length - 1].isFinal) {
+          const finalTranscript = transcript.trim();
+          if (finalTranscript) {
+               correctAndSubmit(finalTranscript);
+          }
+      }
     };
 
     recognition.start();
-  }, [voiceState, language, isChatRecording]);
-
-  useEffect(() => {
-    if (isVoiceTranscript && commandInputValue) {
-      // Automatically submit after a short delay for user feedback
-      const timer = setTimeout(() => {
-        handleCommand(commandInputValue);
-        setIsVoiceTranscript(false); // Reset for the next voice command
-      }, 750);
-
-      return () => clearTimeout(timer);
-    }
-  }, [isVoiceTranscript, commandInputValue, handleCommand]);
+  }, [voiceState, language, isChatRecording, correctAndSubmit, setVoiceState, setTtsMessage, setCommandInputValue]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1012,7 +1033,7 @@ const UserApp: React.FC = () => {
       }
   };
 
-  const handleNavigation = (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'menu') => {
+  const handleNavigation = (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'menu' | 'help') => {
     setNotificationPanelOpen(false);
     switch(viewName) {
         case 'feed': setViewStack([{ view: AppView.FEED }]); break;
@@ -1026,6 +1047,7 @@ const UserApp: React.FC = () => {
         case 'rooms': setViewStack([{ view: AppView.ROOMS_HUB }]); break;
         case 'groups': setViewStack([{ view: AppView.GROUPS_HUB }]); break;
         case 'menu': navigate(AppView.MOBILE_MENU); break;
+        case 'help': navigate(AppView.HELP); break;
     }
   }
   
@@ -1149,6 +1171,8 @@ const UserApp: React.FC = () => {
         return <CallScreen {...commonScreenProps} {...currentView.props} />;
       case AppView.MOBILE_MENU:
         return <MobileMenuScreen currentUser={user} onNavigate={navigate} onLogout={handleLogout} friendRequestCount={friendRequestCount} />;
+      case AppView.HELP:
+        return <HelpScreen onGoBack={goBack} />;
       default:
         return <FeedScreen {...commonScreenProps} posts={posts} isLoading={isLoadingFeed} onReactToPost={handleReactToPost} onStartCreatePost={handleStartCreatePost} onRewardedAdClick={handleRewardedAdClick} onAdClick={handleAdClick} onAdViewed={handleAdViewed} friends={friends} setSearchResults={setSearchResults} onDeletePost={handleDeletePost} onReportPost={handleReportPost} hiddenPostIds={hiddenPostIds} onHidePost={handleHidePost} onSavePost={handleSavePost} onCopyLink={handleCopyLink} />;
     }

@@ -5,7 +5,7 @@ import VoiceCommandInput from './VoiceCommandInput';
 
 interface SidebarProps {
   currentUser: User;
-  onNavigate: (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups') => void;
+  onNavigate: (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'help') => void;
   friendRequestCount: number;
   activeView: AppView;
   voiceCoins: number;
@@ -122,6 +122,12 @@ const Sidebar: React.FC<SidebarProps> = (props) => {
                 label="Settings"
                 isActive={activeView === AppView.SETTINGS}
                 onClick={() => onNavigate('settings')}
+            />
+            <NavItem
+                iconName="question-mark-circle"
+                label="Help & Commands"
+                isActive={activeView === AppView.HELP}
+                onClick={() => onNavigate('help')}
             />
           </ul>
         </nav>
