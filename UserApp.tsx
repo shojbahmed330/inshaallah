@@ -201,13 +201,16 @@ const UserApp: React.FC = () => {
 
   const notificationPanelRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null); 
+  const recognitionRef = useRef<any>(null);
   const passiveRecognitionRef = useRef<any>(null);
-  const stopPassiveListenerRef = useRef<boolean>(false);
   const viewerPostUnsubscribe = useRef<(() => void) | null>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const currentView = viewStack[viewStack.length - 1];
   const unreadNotificationCount = notifications.filter(n => !n.read).length;
+  
+  const startPassiveListener = useRef<() => void>(() => {});
+  const handleMicClickRef = useRef<() => void>(() => {});
+
 
   const userFriendIds = useMemo(() => user?.friendIds || [], [user?.friendIds]);
   const userBlockedIds = useMemo(() => user?.blockedUserIds || [], [user?.blockedUserIds]);
@@ -691,32 +694,28 @@ const UserApp: React.FC = () => {
       handleGlobalCommands();
   }, [lastCommand, friends, groups, user, handleNavigation, goBack, handleStartCreatePost, navigate, setTtsMessage, handleOpenProfile, handleCommandProcessed]);
 
-
   const handleMicClick = useCallback(() => {
     if (isChatRecording) {
       setTtsMessage("In-chat voice message is currently recording.");
       return;
     }
 
-    if (passiveRecognitionRef.current) {
-        stopPassiveListenerRef.current = true;
-        passiveRecognitionRef.current.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
     }
+
+    if (passiveRecognitionRef.current) {
+      passiveRecognitionRef.current.onend = null;
+      passiveRecognitionRef.current.stop();
+      passiveRecognitionRef.current = null;
+    }
+    
+    setVoiceState(VoiceState.IDLE);
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setTtsMessage(getTtsPrompt('error_no_speech_rec', language));
-      return;
-    }
-
-    if (voiceState === VoiceState.ACTIVE_LISTENING) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      return;
-    }
-
-    if (voiceState === VoiceState.PROCESSING) {
       return;
     }
 
@@ -730,23 +729,21 @@ const UserApp: React.FC = () => {
 
     recognition.onstart = () => {
       setVoiceState(VoiceState.ACTIVE_LISTENING);
-      setCommandInputValue(''); 
+      setCommandInputValue('');
       setTtsMessage("Listening...");
     };
 
     recognition.onend = () => {
       recognitionRef.current = null;
-      if (voiceState === VoiceState.ACTIVE_LISTENING) {
-        setVoiceState(VoiceState.IDLE);
-      }
-      stopPassiveListenerRef.current = false;
+      setVoiceState(currentVoiceState => currentVoiceState === VoiceState.ACTIVE_LISTENING ? VoiceState.IDLE : currentVoiceState);
+      setTimeout(() => startPassiveListener.current(), 100);
     };
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error', event.error);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         setTtsMessage(getTtsPrompt('error_mic_permission', language));
-      } else {
+      } else if (event.error !== 'aborted') {
         setTtsMessage(getTtsPrompt('error_generic', language));
       }
     };
@@ -756,24 +753,24 @@ const UserApp: React.FC = () => {
       handleCommand(command);
     };
 
-    recognition.start();
-  }, [voiceState, handleCommand, language, isChatRecording]);
-  
-  // Effect for wake word listening
-  useEffect(() => {
-    if (!user) {
-        if (passiveRecognitionRef.current) {
-            stopPassiveListenerRef.current = true;
-            passiveRecognitionRef.current.stop();
-        }
-        return;
+    try {
+        recognition.start();
+    } catch(e) {
+        console.error("Could not start active listener", e);
+        setTtsMessage(getTtsPrompt('error_mic_not_found', language));
     }
+  }, [isChatRecording, language, handleCommand]);
+  
+  handleMicClickRef.current = handleMicClick;
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+  useEffect(() => {
+    const startFn = () => {
+        if (!userRef.current || recognitionRef.current || passiveRecognitionRef.current) {
+            return;
+        }
 
-    const startPassiveListener = () => {
-        if (stopPassiveListenerRef.current || recognitionRef.current || passiveRecognitionRef.current) return;
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
 
         const recognition = new SpeechRecognition();
         passiveRecognitionRef.current = recognition;
@@ -782,53 +779,60 @@ const UserApp: React.FC = () => {
         recognition.interimResults = true;
 
         recognition.onstart = () => {
-            if (!stopPassiveListenerRef.current) {
-                setVoiceState(VoiceState.PASSIVE_LISTENING);
-                setTtsMessage("Say 'Hey VoiceBook'...");
-            }
+            setVoiceState(VoiceState.PASSIVE_LISTENING);
+            setTtsMessage("Say 'Hey VoiceBook'...");
         };
 
         recognition.onresult = (event: any) => {
             const transcript = Array.from(event.results).map((result: any) => result[0].transcript).join('');
             if (transcript.toLowerCase().includes('hey voicebook') || transcript.toLowerCase().includes('hay voicebook') || transcript.toLowerCase().includes('voice book')) {
-                stopPassiveListenerRef.current = true;
+                recognition.onend = null;
                 recognition.stop();
-                handleMicClick();
+                passiveRecognitionRef.current = null;
+                handleMicClickRef.current();
             }
         };
 
         recognition.onerror = (e: any) => {
-            console.error('Passive listener error', e.error);
-             if (e.error !== 'no-speech') {
-                stopPassiveListenerRef.current = true;
+            console.error('Passive listener error:', e.error);
+             if (e.error !== 'no-speech' && passiveRecognitionRef.current === recognition) {
+                recognition.stop();
             }
         };
 
         recognition.onend = () => {
-            passiveRecognitionRef.current = null;
-            if (!stopPassiveListenerRef.current) {
-                setTimeout(startPassiveListener, 250);
+            if (passiveRecognitionRef.current === recognition && !recognitionRef.current) {
+                 passiveRecognitionRef.current = null;
+                 setTimeout(() => startPassiveListener.current(), 250);
             }
         };
-
-        recognition.start();
+        
+        try {
+            recognition.start();
+        } catch (e) {
+            console.error("Could not start passive listener:", e);
+        }
     };
+    
+    startPassiveListener.current = startFn;
 
-    startPassiveListener();
-
+    if (user) {
+        startFn();
+    }
+    
     return () => {
-        stopPassiveListenerRef.current = true;
         if (passiveRecognitionRef.current) {
+            passiveRecognitionRef.current.onend = null;
             passiveRecognitionRef.current.stop();
             passiveRecognitionRef.current = null;
         }
         if (recognitionRef.current) {
+            recognitionRef.current.onend = null;
             recognitionRef.current.stop();
             recognitionRef.current = null;
         }
     };
-}, [user, handleMicClick]);
-
+}, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
