@@ -239,7 +239,8 @@ export const geminiService = {
               }
             },
             required: ['intent']
-          }
+          },
+          thinkingConfig: { thinkingBudget: 0 }
         },
       });
 
