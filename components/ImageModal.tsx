@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { Post, User, Comment } from '../types';
 import Icon from './Icon';
 import CommentCard from './CommentCard';
 import TaggedContent from './TaggedContent';
 import ReactionListModal from './ReactionListModal';
+import { geminiService } from '../services/geminiService';
 
 interface ImageModalProps {
   post: Post | null;
@@ -23,11 +24,13 @@ interface ImageModalProps {
   onOpenProfile: (userName: string) => void;
   onSharePost: (post: Post) => void;
   onOpenCommentsSheet: (post: Post) => void;
+  lastCommand?: string | null;
+  onCommandProcessed?: () => void;
 }
 
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
-const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToImage, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet, onDeletePost, onReportPost, onReportComment }) => {
+const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, initialUrl, onClose, onReactToPost, onReactToImage, onReactToComment, onPostComment, onEditComment, onDeleteComment, onOpenProfile, onSharePost, onOpenCommentsSheet, onDeletePost, onReportPost, onReportComment, lastCommand, onCommandProcessed }) => {
   if (!post || !post.author) {
     return null;
   }
@@ -57,6 +60,38 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
   const allImages = useMemo(() => imageDetails.map(d => d.url), [imageDetails]);
   const currentImageDetail = imageDetails[currentIndex];
   const isMultiImagePost = imageDetails.length > 1;
+
+  const handlePrev = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentIndex(i => (i === 0 ? allImages.length - 1 : i - 1));
+  }, [allImages.length]);
+
+  const handleNext = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setCurrentIndex(i => (i === allImages.length - 1 ? 0 : i + 1));
+  }, [allImages.length]);
+
+  const handleCommand = useCallback((command: string) => {
+      if (!onCommandProcessed) return;
+
+      geminiService.processIntent(command).then(response => {
+          if (response.intent === 'intent_next_image' || response.intent === 'intent_next_post') {
+              handleNext();
+          } else if (response.intent === 'intent_previous_image' || response.intent === 'intent_previous_post') {
+              handlePrev();
+          } else if (response.intent === 'intent_go_back') {
+              onClose();
+          }
+          onCommandProcessed();
+      });
+  }, [onCommandProcessed, handleNext, handlePrev, onClose]);
+
+  useEffect(() => {
+      if (lastCommand) {
+          handleCommand(lastCommand);
+      }
+  }, [lastCommand, handleCommand]);
+
 
   useEffect(() => {
     if (initialUrl && allImages.length > 0) {
@@ -219,16 +254,6 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
       );
   };
 
-  const handlePrev = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentIndex(i => (i === 0 ? allImages.length - 1 : i - 1));
-  };
-
-  const handleNext = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentIndex(i => (i === allImages.length - 1 ? 0 : i + 1));
-  };
-
   if (isLoading) {
     return (
         <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center">
@@ -271,10 +296,10 @@ const ImageModal: React.FC<ImageModalProps> = ({ post, currentUser, isLoading, i
 
           {allImages.length > 1 && (
               <>
-                  <button onClick={handlePrev} className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/70 rounded-full transition-colors text-white" aria-label="Previous image">
+                  <button onClick={(e) => handlePrev(e)} className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/70 rounded-full transition-colors text-white" aria-label="Previous image">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   </button>
-                  <button onClick={handleNext} className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/70 rounded-full transition-colors text-white" aria-label="Next image">
+                  <button onClick={(e) => handleNext(e)} className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-3 bg-black/40 hover:bg-black/70 rounded-full transition-colors text-white" aria-label="Next image">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </button>
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm font-semibold">

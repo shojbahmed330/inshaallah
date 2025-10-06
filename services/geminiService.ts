@@ -22,14 +22,23 @@ The JSON object must have:
 1. An "intent" field: A string matching one of the intents from the list below.
 2. An optional "slots" object: For intents that require extra information (like a name or number).
 
+CONTEXTUAL RULES:
+- If a user says a simple action like "like", "comment", "share", or "open profile" without specifying a target name, assume they mean the currently active post on the screen. The app will handle the context. Your job is just to return the base intent (e.g., "intent_like").
+- If a command is "next" or "previous", it could mean the next post in a feed, or the next image in a multi-image view. The app has context. You can use 'intent_next_post' for generic next commands, and 'intent_next_image' if the user explicitly says 'next image' or 'porer chobi'.
+
 If the user's intent is unclear or not in the list, you MUST use the intent "unknown".
 
-Example Bengali commands:
-- "পাসওয়ার্ড পরিবর্তন কর" -> { "intent": "intent_change_password" }
-- "আমার অ্যাকাউন্ট নিষ্ক্রিয় কর" -> { "intent": "intent_deactivate_account" }
-- "সেটিংসে যাও" -> { "intent": "intent_open_settings" }
-- "shojib ke khojo" -> { "intent": "intent_search_user", "slots": { "target_name": "shojib" } }
+Example Bengali/Banglish commands:
+- "পাসওয়ার্ড পরিবর্তন কর" (change password) -> { "intent": "intent_change_password" }
+- "আমার অ্যাকাউন্ট নিষ্ক্রিয় কর" (deactivate my account) -> { "intent": "intent_deactivate_account" }
+- "সেটিংসে যাও" (go to settings) -> { "intent": "intent_open_settings" }
+- "shojib ke khojo" (search for shojib) -> { "intent": "intent_search_user", "slots": { "target_name": "shojib" } }
+- "এই পোস্টে লাইক দাও" (like this post) -> { "intent": "intent_like" }
+- "পরের পোস্টে যাও" (go to next post) -> { "intent": "intent_next_post" }
+- "আমার প্রোফাইল খোলো" (open my profile) -> { "intent": "intent_open_profile" }
+- "হোম পেজে যাও" (go to home page) -> { "intent": "intent_open_feed" }
 - "add text Fine" -> { "intent": "intent_add_text_to_story", "slots": { "text": "Fine" } }
+- "পরের ছবি" (next picture) -> { "intent": "intent_next_image" }
 `;
 
 let NLU_INTENT_LIST = `
@@ -39,6 +48,8 @@ let NLU_INTENT_LIST = `
 - intent_pause_post
 - intent_next_post
 - intent_previous_post
+- intent_next_image
+- intent_previous_image
 - intent_create_post
 - intent_create_voice_post
 - intent_stop_recording
@@ -97,6 +108,7 @@ let NLU_INTENT_LIST = `
 - intent_deactivate_account
 - intent_open_feed
 - intent_open_explore
+- intent_open_reels
 - intent_open_rooms_hub
 - intent_open_audio_rooms
 - intent_open_video_rooms

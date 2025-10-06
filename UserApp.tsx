@@ -1329,6 +1329,8 @@ const UserApp: React.FC = () => {
             onOpenCommentsSheet={handleOpenComments}
             onReportPost={handleReportPost}
             onReportComment={handleReportComment}
+            lastCommand={lastCommand}
+            onCommandProcessed={handleCommandProcessed}
          />
       )}
        {incomingCall && (

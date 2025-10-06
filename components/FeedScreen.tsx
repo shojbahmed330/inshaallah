@@ -183,11 +183,13 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
                 const postToLike = posts.find(p => !p.isSponsored && p.author.name === targetName);
                 if (postToLike) {
                     onReactToPost(postToLike.id, '👍');
+                    onSetTtsMessage(`Liked ${postToLike.author.name}'s post.`);
                 } else {
                     onSetTtsMessage(`I couldn't find a post by ${targetName} to like.`);
                 }
             } else if (currentPostIndex !== -1 && posts[currentPostIndex] && !posts[currentPostIndex].isSponsored) {
               onReactToPost(posts[currentPostIndex].id, '👍');
+              onSetTtsMessage(`Liked ${posts[currentPostIndex].author.name}'s post.`);
             }
             break;
           case 'intent_share':
@@ -235,6 +237,14 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
               break;
           case 'intent_open_feed':
               onNavigate(AppView.FEED);
+              break;
+          case 'intent_open_explore':
+              onNavigate(AppView.EXPLORE);
+              onSetTtsMessage("Opening Explore.");
+              break;
+          case 'intent_open_reels':
+              onNavigate(AppView.REELS);
+              onSetTtsMessage("Opening Reels.");
               break;
           case 'intent_open_ads_center':
               onNavigate(AppView.ADS_CENTER);
