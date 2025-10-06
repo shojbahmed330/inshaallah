@@ -1198,6 +1198,10 @@ const UserApp: React.FC = () => {
           voiceState={voiceState}
           onMicClick={handleMicClick}
           isChatRecording={isChatRecording}
+          onSendCommand={handleCommand}
+          commandInputValue={commandInputValue}
+          setCommandInputValue={setCommandInputValue}
+          ttsMessage={ttsMessage}
         />
       )}
       

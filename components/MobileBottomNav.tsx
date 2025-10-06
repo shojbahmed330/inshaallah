@@ -44,65 +44,23 @@ const NavItem: React.FC<{
 
 
 const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
-    const { onNavigate, friendRequestCount, activeView, voiceState, onMicClick, isChatRecording } = props;
-    
-    // State for Draggable FAB
-    const fabRef = useRef<HTMLDivElement>(null);
-    const [position, setPosition] = useState({ x: window.innerWidth - 80, y: window.innerHeight - 160 });
-    const dragStartRef = useRef({ x: 0, y: 0 });
-    const hasMovedRef = useRef(false);
-
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        hasMovedRef.current = false;
-        const touch = e.touches[0];
-        dragStartRef.current = {
-            x: touch.clientX - position.x,
-            y: touch.clientY - position.y,
-        };
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        hasMovedRef.current = true;
-        const touch = e.touches[0];
-        const fabElement = fabRef.current;
-        if (!fabElement) return;
-
-        const rect = fabElement.getBoundingClientRect();
-        let newX = touch.clientX - dragStartRef.current.x;
-        let newY = touch.clientY - dragStartRef.current.y;
-
-        // Clamp position to be within the viewport
-        newX = Math.max(8, Math.min(newX, window.innerWidth - rect.width - 8));
-        newY = Math.max(8, Math.min(newY, window.innerHeight - rect.height - 8));
-
-        setPosition({ x: newX, y: newY });
-    };
-
-    const handleFabClick = () => {
-        if (hasMovedRef.current) return;
-        onMicClick();
-    };
-
-    const getFabClass = () => {
-        let base = "w-16 h-16 rounded-full text-white shadow-lg flex items-center justify-center transition-all duration-300 transform hover:scale-105";
-        if (isChatRecording) {
-          return `${base} bg-slate-500 cursor-not-allowed`;
-        }
-        switch (voiceState) {
-            case VoiceState.LISTENING:
-                return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
-            case VoiceState.PROCESSING:
-                return `${base} bg-yellow-600 cursor-not-allowed`;
-            default: // IDLE
-                return `${base} bg-gradient-to-br from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500`;
-        }
-    };
+    const { onNavigate, friendRequestCount, activeView } = props;
     
     return (
-        <>
+        <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex flex-col">
+            {/* Command Input */}
+            <VoiceCommandInput
+                onSendCommand={props.onSendCommand}
+                voiceState={props.voiceState}
+                onMicClick={props.onMicClick}
+                value={props.commandInputValue}
+                onValueChange={props.setCommandInputValue}
+                placeholder={props.ttsMessage}
+                isChatRecording={props.isChatRecording}
+            />
+
             {/* Main Navigation Bar */}
-            <div className="fixed bottom-0 left-0 right-0 h-16 bg-black/50 backdrop-blur-md border-t border-white/10 z-40 md:hidden flex justify-around items-center">
+            <div className="h-16 bg-black/50 backdrop-blur-md border-t border-white/10 flex justify-around items-center">
                 <NavItem
                     iconName="home-solid"
                     label="Home"
@@ -134,25 +92,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
                     onClick={() => onNavigate('menu')}
                 />
             </div>
-
-            {/* Command FAB */}
-            <div 
-                ref={fabRef}
-                className="fixed z-50 md:hidden touch-none"
-                style={{ top: `${position.y}px`, left: `${position.x}px` }}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-            >
-                <button
-                  onClick={handleFabClick}
-                  disabled={voiceState === VoiceState.PROCESSING || isChatRecording}
-                  className={getFabClass()}
-                  aria-label="Open Command Panel"
-                >
-                  <Icon name="mic" className="w-8 h-8"/>
-                </button>
-            </div>
-        </>
+        </div>
     );
 };
 

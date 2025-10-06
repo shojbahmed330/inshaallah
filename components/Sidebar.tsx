@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, AppView, VoiceState } from '../types';
 import Icon from './Icon';
+import VoiceCommandInput from './VoiceCommandInput';
 
 interface SidebarProps {
   currentUser: User;
@@ -11,6 +12,10 @@ interface SidebarProps {
   voiceState: VoiceState;
   onMicClick: () => void;
   isChatRecording: boolean;
+  onSendCommand: (command: string) => void;
+  commandInputValue: string;
+  setCommandInputValue: (value: string) => void;
+  ttsMessage: string;
 }
 
 const NavItem: React.FC<{
@@ -42,45 +47,8 @@ const NavItem: React.FC<{
     );
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendRequestCount, activeView, voiceCoins, voiceState, onMicClick, isChatRecording }) => {
-  const getFabClass = () => {
-    let base = "w-full text-white font-bold text-lg py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2";
-    if (isChatRecording) {
-      return `${base} bg-slate-500 cursor-not-allowed`;
-    }
-    switch (voiceState) {
-        case VoiceState.LISTENING:
-            return `${base} bg-red-500 ring-4 ring-red-500/50 animate-pulse`;
-        case VoiceState.PROCESSING:
-            return `${base} bg-yellow-600 cursor-not-allowed`;
-        default: // IDLE
-            return `${base} bg-fuchsia-600 hover:bg-fuchsia-500`;
-    }
-  };
-
-  const getFabIcon = () => {
-    switch (voiceState) {
-        case VoiceState.PROCESSING:
-            return <Icon name="logo" className="w-6 h-6 animate-spin" />;
-        case VoiceState.LISTENING:
-        default:
-            return <Icon name="mic" className="w-6 h-6" />;
-    }
-  };
-
-  const getFabText = () => {
-     if (isChatRecording) {
-      return "Recording...";
-    }
-    switch (voiceState) {
-        case VoiceState.PROCESSING:
-            return "Processing...";
-        case VoiceState.LISTENING:
-            return "Listening...";
-        default:
-            return "Voice Command";
-    }
-  };
+const Sidebar: React.FC<SidebarProps> = (props) => {
+  const { currentUser, onNavigate, friendRequestCount, activeView, voiceCoins } = props;
 
   return (
     <aside className="w-72 bg-black/20 backdrop-blur-md flex-shrink-0 hidden md:flex flex-col p-4">
@@ -172,16 +140,17 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onNavigate, friendReques
       </div>
 
 
-      {/* Voice Command Button */}
+      {/* Voice Command Input */}
       <div className="flex-shrink-0">
-        <button
-          onClick={onMicClick}
-          disabled={voiceState === VoiceState.PROCESSING || isChatRecording}
-          className={getFabClass()}
-        >
-            {getFabIcon()}
-            <span>{getFabText()}</span>
-        </button>
+        <VoiceCommandInput
+            onSendCommand={props.onSendCommand}
+            voiceState={props.voiceState}
+            onMicClick={props.onMicClick}
+            value={props.commandInputValue}
+            onValueChange={props.setCommandInputValue}
+            placeholder={props.ttsMessage}
+            isChatRecording={props.isChatRecording}
+        />
       </div>
     </aside>
   );
