@@ -761,7 +761,7 @@ const UserApp: React.FC = () => {
   
   // Effect for wake word listening
   useEffect(() => {
-    if (!user || isChatRecording) {
+    if (!user) {
         if (passiveRecognitionRef.current) {
             stopPassiveListenerRef.current = true;
             passiveRecognitionRef.current.stop();
@@ -827,7 +827,7 @@ const UserApp: React.FC = () => {
             recognitionRef.current = null;
         }
     };
-}, [user, isChatRecording, handleMicClick]);
+}, [user, handleMicClick]);
 
 
   useEffect(() => {

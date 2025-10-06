@@ -328,7 +328,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ currentUser, peerUser, onClose,
   const handleInitiateCall = async (type: 'audio' | 'video') => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach(track => track.stop()); // We only needed permission, CallScreen will get its own stream
         const callId = await firebaseService.createCall(currentUser, peerUser, chatId, type);
         onNavigate(AppView.CALL_SCREEN, { callId, peerUser, isCaller: true });
     } catch (error: any) {
