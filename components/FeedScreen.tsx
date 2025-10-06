@@ -225,8 +225,8 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
           case 'intent_open_profile':
             if (slots?.target_name) {
               onOpenProfile(slots.target_name as string);
-            } else if (currentPostIndex !== -1 && posts[currentPostIndex] && !posts[currentPostIndex].isSponsored) {
-                onOpenProfile(posts[currentPostIndex].author.name);
+            } else {
+              onOpenProfile(currentUser.username);
             }
             break;
           case 'intent_create_post':
@@ -303,7 +303,7 @@ const FeedScreen: React.FC<FeedScreenProps> = ({
     }
   }, [
       posts, currentPostIndex, friends, onOpenProfile, onReactToPost, onOpenComments, onSetTtsMessage, onStartCreatePost, 
-      onNavigate, onSetScrollState, setSearchResults, onCommandProcessed, fetchRewardedCampaign, onSharePost, language
+      onNavigate, onSetScrollState, setSearchResults, onCommandProcessed, fetchRewardedCampaign, onSharePost, language, currentUser
   ]);
 
 

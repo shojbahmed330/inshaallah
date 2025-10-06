@@ -45,7 +45,6 @@ const NavItem: React.FC<{
 
 const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
     const { onNavigate, friendRequestCount, activeView, voiceState, onMicClick, isChatRecording } = props;
-    const [isCommandOpen, setIsCommandOpen] = useState(false);
     
     // State for Draggable FAB
     const fabRef = useRef<HTMLDivElement>(null);
@@ -82,7 +81,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
 
     const handleFabClick = () => {
         if (hasMovedRef.current) return;
-        setIsCommandOpen(true);
+        onMicClick();
     };
 
     const getFabClass = () => {
@@ -153,40 +152,6 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = (props) => {
                   <Icon name="mic" className="w-8 h-8"/>
                 </button>
             </div>
-
-            {/* Command Drawer */}
-            <div 
-                className={`fixed top-0 right-0 h-full w-4/5 max-w-sm bg-black/60 backdrop-blur-xl border-l border-white/10 z-[60] transform transition-transform duration-300 ease-in-out md:hidden flex flex-col p-4 ${
-                  isCommandOpen ? 'translate-x-0' : 'translate-x-full'
-                }`}
-            >
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-fuchsia-400">Voice Command</h2>
-                    <button onClick={() => setIsCommandOpen(false)} className="p-2 rounded-full hover:bg-white/10">
-                      <Icon name="close" className="w-6 h-6"/>
-                    </button>
-                </div>
-                <div className="flex-grow flex flex-col justify-center">
-                    <VoiceCommandInput
-                        onSendCommand={(cmd) => { props.onSendCommand(cmd); setIsCommandOpen(false); }}
-                        voiceState={props.voiceState}
-                        onMicClick={props.onMicClick}
-                        value={props.commandInputValue}
-                        onValueChange={props.setCommandInputValue}
-                        placeholder={props.ttsMessage}
-                        isChatRecording={props.isChatRecording}
-                    />
-                </div>
-                <p className="text-xs text-center text-slate-400 mt-4">Say "next post", "search for a user", "go back", or type a command.</p>
-            </div>
-      
-            {/* Overlay when drawer is open */}
-            {isCommandOpen && (
-                <div 
-                  onClick={() => setIsCommandOpen(false)}
-                  className="fixed inset-0 bg-black/60 z-50 md:hidden animate-fade-in-fast"
-                />
-            )}
         </>
     );
 };
