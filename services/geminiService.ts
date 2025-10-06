@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { GoogleGenAI, Type } from "@google/genai";
-import { User, Post, Campaign, FriendshipStatus, Comment, Group } from '../types';
+import { User, Post, Campaign, FriendshipStatus, Comment, Group, Message, ReplyInfo, MusicTrack } from '../types';
 import { firebaseService } from './firebaseService';
+import { MOCK_MUSIC_LIBRARY } from '../constants';
 
 
 // --- Gemini API Initialization ---
@@ -148,4 +149,83 @@ export const geminiService = {
   // Polls & Answers
   voteOnPoll: (userId, postId, optionIndex) => firebaseService.voteOnPoll(userId, postId, optionIndex),
   markBestAnswer: (userId, postId, commentId) => firebaseService.markBestAnswer(userId, postId, commentId),
+
+  // FIX: Add missing service methods by delegating to firebaseService or providing mock implementations.
+  getRandomActiveCampaign: () => firebaseService.getRandomActiveCampaign(),
+  getCampaignsForSponsor: (sponsorId) => firebaseService.getCampaignsForSponsor(sponsorId),
+  submitCampaignForApproval: (campaignData, transactionId) => firebaseService.submitCampaignForApproval(campaignData, transactionId),
+  updateUserRole: (userId, newRole) => firebaseService.updateUserRole(userId, newRole),
+  getAllPostsForAdmin: () => firebaseService.getAllPostsForAdmin(),
+  deletePostAsAdmin: (postId) => firebaseService.deletePostAsAdmin(postId),
+  deleteCommentAsAdmin: (commentId, postId) => firebaseService.deleteCommentAsAdmin(commentId, postId),
+  getAdminDashboardStats: () => firebaseService.getAdminDashboardStats(),
+  listenToLiveAudioRooms: (callback) => firebaseService.listenToLiveAudioRooms(callback),
+  createLiveAudioRoom: (host, topic) => firebaseService.createLiveAudioRoom(host, topic),
+  getAgoraToken: (channelName, uid) => firebaseService.getAgoraToken(channelName, uid),
+  joinLiveAudioRoom: (userId, roomId) => firebaseService.joinLiveAudioRoom(userId, roomId),
+  leaveLiveAudioRoom: (userId, roomId) => firebaseService.leaveLiveAudioRoom(userId, roomId),
+  listenToAudioRoom: (roomId, callback) => firebaseService.listenToRoom(roomId, 'audio', callback),
+  endLiveAudioRoom: (userId, roomId) => firebaseService.endLiveAudioRoom(userId, roomId),
+  raiseHandInAudioRoom: (userId, roomId) => firebaseService.raiseHandInAudioRoom(userId, roomId),
+  inviteToSpeakInAudioRoom: (hostId, userId, roomId) => firebaseService.inviteToSpeakInAudioRoom(hostId, userId, roomId),
+  moveToAudienceInAudioRoom: (hostId, userId, roomId) => firebaseService.moveToAudienceInAudioRoom(hostId, userId, roomId),
+  listenToLiveAudioRoomMessages: (roomId, callback) => firebaseService.listenToLiveAudioRoomMessages(roomId, callback),
+  sendLiveAudioRoomMessage: (roomId, sender, text, isHost, isSpeaker) => firebaseService.sendLiveAudioRoomMessage(roomId, sender, text, isHost, isSpeaker),
+  reactToLiveAudioRoomMessage: (roomId, messageId, userId, emoji) => firebaseService.reactToLiveAudioRoomMessage(roomId, messageId, userId, emoji),
+  listenToLiveVideoRooms: (callback) => firebaseService.listenToLiveVideoRooms(callback),
+  createLiveVideoRoom: (host, topic) => firebaseService.createLiveVideoRoom(host, topic),
+  endLiveVideoRoom: (userId, roomId) => firebaseService.endLiveVideoRoom(userId, roomId),
+  leaveLiveVideoRoom: (userId, roomId) => firebaseService.leaveLiveVideoRoom(userId, roomId),
+  updateParticipantStateInVideoRoom: (roomId, userId, updates) => firebaseService.updateParticipantStateInVideoRoom(roomId, userId, updates),
+  joinLiveVideoRoom: (userId, roomId) => firebaseService.joinLiveVideoRoom(userId, roomId),
+  listenToVideoRoom: (roomId, callback) => firebaseService.listenToRoom(roomId, 'video', callback),
+  listenToLiveVideoRoomMessages: (roomId, callback) => firebaseService.listenToLiveVideoRoomMessages(roomId, callback),
+  sendLiveVideoRoomMessage: (roomId, sender, text) => firebaseService.sendLiveVideoRoomMessage(roomId, sender, text),
+  listenToGroup: (groupId, callback) => firebaseService.listenToGroup(groupId, callback),
+  listenToPostsForGroup: (groupId, callback) => firebaseService.listenToPostsForGroup(groupId, callback),
+  joinGroup: (userId, groupId, answers) => firebaseService.joinGroup(userId, groupId, answers),
+  leaveGroup: (userId, groupId) => firebaseService.leaveGroup(userId, groupId),
+  pinPost: (groupId, postId) => firebaseService.pinPost(groupId, postId),
+  unpinPost: (groupId) => firebaseService.unpinPost(groupId),
+  promoteGroupMember: (groupId, user, role) => firebaseService.promoteGroupMember(groupId, user, role),
+  demoteGroupMember: (groupId, user, role) => firebaseService.demoteGroupMember(groupId, user, role),
+  removeGroupMember: (groupId, user) => firebaseService.removeGroupMember(groupId, user),
+  approveJoinRequest: (groupId, userId) => firebaseService.approveJoinRequest(groupId, userId),
+  rejectJoinRequest: (groupId, userId) => firebaseService.rejectJoinRequest(groupId, userId),
+  approvePost: (postId) => firebaseService.approvePost(postId),
+  rejectPost: (postId) => firebaseService.rejectPost(postId),
+  listenToGroupChat: (groupId, callback) => firebaseService.listenToGroupChat(groupId, callback),
+  sendGroupChatMessage: (groupId, sender, text, replyTo) => firebaseService.sendGroupChatMessage(groupId, sender, text, replyTo),
+  reactToGroupChatMessage: (groupId, messageId, userId, emoji) => firebaseService.reactToGroupChatMessage(groupId, messageId, userId, emoji),
+  getGroupEvents: (groupId) => firebaseService.getGroupEvents(groupId),
+  rsvpToEvent: (userId, eventId) => firebaseService.rsvpToEvent(userId, eventId),
+  createGroupEvent: (creator, groupId, title, description, date) => firebaseService.createGroupEvent(creator, groupId, title, description, date),
+  getMusicLibrary: (): MusicTrack[] => MOCK_MUSIC_LIBRARY,
+  createStory: (storyData, mediaFile) => firebaseService.createStory(storyData, mediaFile),
+  markStoryAsViewed: (storyId, userId) => firebaseService.markStoryAsViewed(storyId, userId),
+  getFriendsList: (userId) => firebaseService.getFriends(userId),
+  inviteFriendToGroup: (groupId, friendId) => firebaseService.inviteFriendToGroup(groupId, friendId),
+  getCategorizedExploreFeed: (userId) => firebaseService.getCategorizedExploreFeed(userId),
+  getPostById: (postId) => firebaseService.getPostById(postId),
+  getPendingReports: () => firebaseService.getPendingReports(),
+  resolveReport: (reportId, resolution) => firebaseService.resolveReport(reportId, resolution),
+  getUserDetailsForAdmin: (userId) => firebaseService.getUserDetailsForAdmin(userId),
+  sendSiteWideAnnouncement: (message) => firebaseService.sendSiteWideAnnouncement(message),
+  getAllCampaignsForAdmin: () => firebaseService.getAllCampaignsForAdmin(),
+  verifyCampaignPayment: (campaignId, adminId) => firebaseService.verifyCampaignPayment(campaignId, adminId),
+  createReplySnippet: (message: Message): ReplyInfo => {
+    let content = '';
+    switch(message.type) {
+        case 'text': content = message.text || ''; break;
+        case 'image': content = 'Photo'; break;
+        case 'video': content = 'Video'; break;
+        case 'audio': content = `Voice message (${message.duration}s)`; break;
+        default: content = '...'; break;
+    }
+    return {
+        messageId: message.id,
+        senderName: 'User', // This is a simplification. The UI should derive the name.
+        content: content.substring(0, 30),
+    };
+  },
 };

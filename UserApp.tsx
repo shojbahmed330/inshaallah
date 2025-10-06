@@ -206,7 +206,6 @@ const UserApp: React.FC = () => {
   const userRef = useRef(user);
   userRef.current = user;
   const recognitionRef = useRef<any | null>(null);
-  const commandTimeoutRef = useRef<number | null>(null);
   
   const activeChatsRef = useRef(activeChats);
   activeChatsRef.current = activeChats;
@@ -587,10 +586,12 @@ const UserApp: React.FC = () => {
             setTtsMessage(getTtsPrompt('error_generic', language));
             onCommandProcessed();
         } finally {
+            // After processing, return to passive listening, not active.
             setVoiceState(VoiceState.PASSIVE_LISTENING);
         }
     }, [user, navigate, goBack, language, onCommandProcessed, handleNavigation]);
 
+    // This effect manages the entire lifecycle of the SpeechRecognition object.
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -601,81 +602,105 @@ const UserApp: React.FC = () => {
 
         if (!recognitionRef.current) {
             recognitionRef.current = new SpeechRecognition();
-            recognitionRef.current.continuous = true;
-            recognitionRef.current.interimResults = true;
-            recognitionRef.current.lang = language === 'bn' ? 'bn-BD' : 'en-US';
-
-            recognitionRef.current.onstart = () => {
-                if(voiceState !== VoiceState.ACTIVE_LISTENING) setVoiceState(VoiceState.PASSIVE_LISTENING);
-            };
-
-            recognitionRef.current.onend = () => {
-                if (voiceState !== VoiceState.IDLE && recognitionRef.current) {
-                    try { recognitionRef.current.start(); } catch(e) { console.error(e); }
-                }
-            };
-            
-            recognitionRef.current.onerror = (event: any) => {
-                console.error('Speech recognition error', event.error);
-                if (event.error === 'not-allowed') {
-                    setVoiceState(VoiceState.IDLE);
-                    setTtsMessage("Microphone access was denied. Voice control is disabled.");
-                }
-            };
-
-            recognitionRef.current.onresult = (event: any) => {
-                let finalTranscript = '';
-                let interim = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    } else {
-                        interim += event.results[i][0].transcript;
-                    }
-                }
-                
-                setInterimTranscript(interim);
-                const fullTranscript = (finalTranscript + interim).toLowerCase().trim();
-                
-                if (commandTimeoutRef.current) {
-                    clearTimeout(commandTimeoutRef.current);
-                }
-
-                if (voiceState === VoiceState.ACTIVE_LISTENING) {
-                     if (finalTranscript.trim()) {
-                        handleCommand(finalTranscript.trim());
-                     } else if(fullTranscript.trim()){
-                         commandTimeoutRef.current = window.setTimeout(() => {
-                             handleCommand(fullTranscript.trim());
-                         }, 1500); 
-                     }
-                } else {
-                    const hotwords = ['hey voicebook', 'voice book', 'hay voicebook', 'হেই ভয়েসবুক'];
-                    if (hotwords.some(hotword => fullTranscript.includes(hotword))) {
-                        setVoiceState(VoiceState.ACTIVE_LISTENING);
-                        setTtsMessage("Listening...");
-                        setInterimTranscript('');
-                    }
-                }
-            };
         }
         
-        if (user && voiceState === VoiceState.IDLE) {
-            try {
-                recognitionRef.current.start();
-            } catch (e) {
-                console.error("Could not start recognition:", e);
-            }
-        }
+        const recognition = recognitionRef.current;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = language === 'bn' ? 'bn-BD' : 'en-US';
+
+        const commandTimeoutRef = React.createRef<number | null>();
         
-        return () => {
-            if (recognitionRef.current) {
-                recognitionRef.current.stop();
-                setVoiceState(VoiceState.IDLE);
+        recognition.onstart = () => {
+             // Only set to passive if not already in an active state.
+            if (voiceState !== VoiceState.ACTIVE_LISTENING && voiceState !== VoiceState.PROCESSING) {
+                setVoiceState(VoiceState.PASSIVE_LISTENING);
             }
         };
 
-    }, [user, voiceState, language, handleCommand]);
+        recognition.onend = () => {
+            // The 'onend' event fires automatically when speech stops, or on error.
+            // We restart it unless the state is 'IDLE', which signifies it was stopped intentionally (e.g., on unmount).
+            if (voiceState !== VoiceState.IDLE) {
+                try {
+                    recognition.start();
+                } catch (e) {
+                     if (e.name !== 'InvalidStateError') {
+                        console.error("Recognition restart error on end:", e);
+                    }
+                }
+            }
+        };
+        
+        recognition.onerror = (event: any) => {
+            console.error('Speech recognition error', event.error);
+            if (event.error === 'not-allowed') {
+                setVoiceState(VoiceState.IDLE);
+                setTtsMessage("Microphone access was denied. Voice control is disabled.");
+            }
+        };
+
+        recognition.onresult = (event: any) => {
+            let finalTranscript = '';
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interim += event.results[i][0].transcript;
+                }
+            }
+            
+            setInterimTranscript(interim);
+            const fullTranscript = (finalTranscript + interim).toLowerCase().trim();
+            
+            if (commandTimeoutRef.current) {
+                clearTimeout(commandTimeoutRef.current);
+            }
+
+            if (voiceState === VoiceState.ACTIVE_LISTENING) {
+                 if (finalTranscript.trim()) {
+                    handleCommand(finalTranscript.trim());
+                 } else if(fullTranscript.trim()){
+                     commandTimeoutRef.current = window.setTimeout(() => {
+                         handleCommand(fullTranscript.trim());
+                     }, 1500); 
+                 }
+            } else { // Passive listening for hotword
+                const hotwords = ['hey voicebook', 'voice book', 'hay voicebook', 'হেই ভয়েসবুক'];
+                if (hotwords.some(hotword => fullTranscript.includes(hotword))) {
+                    setVoiceState(VoiceState.ACTIVE_LISTENING);
+                    setTtsMessage("Listening...");
+                    setInterimTranscript(''); // Clear hotword from transcript
+                }
+            }
+        };
+        
+        // Start recognition if it's currently idle. This will trigger on first load.
+        if (voiceState === VoiceState.IDLE) {
+            try {
+                recognition.start();
+            } catch (e) {
+                 if (e.name !== 'InvalidStateError') { // It might already be starting, which is fine
+                    console.error("Could not start recognition:", e);
+                }
+            }
+        }
+    // We only want to re-run this setup if a dependency that changes behavior is updated.
+    // 'user' is not needed as handleCommand's closure will be updated.
+    }, [voiceState, language, handleCommand]);
+
+    // Separate effect for cleanup on component unmount
+    useEffect(() => {
+        return () => {
+            if (recognitionRef.current) {
+                // To properly stop it, we signal to `onend` not to restart by setting state to IDLE first.
+                setVoiceState(VoiceState.IDLE);
+                recognitionRef.current.stop();
+                console.log("Recognition stopped on unmount.");
+            }
+        }
+    }, []);
     
     useEffect(() => {
         if (ttsMessage) {
