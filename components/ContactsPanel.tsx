@@ -30,11 +30,11 @@ const ContactsPanel: React.FC<ContactsPanelProps> = ({ friends, onOpenConversati
   const sortedFriends = [...onlineFriends, ...offlineFriends];
 
   return (
-    <aside className="w-72 flex-shrink-0 hidden lg:block py-6 pr-4">
-      <div className="bg-slate-900/70 backdrop-blur-sm border border-fuchsia-500/20 p-4 rounded-lg h-full flex flex-col">
-        <h3 className="font-bold text-fuchsia-300 text-lg flex-shrink-0">Contacts</h3>
+    <aside className="w-72 flex-shrink-0 hidden lg:block py-6">
+      <div className="bg-slate-900/70 backdrop-blur-sm border border-lime-500/20 p-4 rounded-lg h-full flex flex-col">
+        <h3 className="font-bold text-lime-300 text-lg flex-shrink-0">Contacts</h3>
         {friends.length === 0 ? (
-          <p className="text-fuchsia-500 text-sm flex-grow flex items-center justify-center">No friends yet</p>
+          <p className="text-lime-500 text-sm flex-grow flex items-center justify-center">No friends yet</p>
         ) : (
           <div className="flex-grow overflow-y-auto no-scrollbar mt-4 -mx-4">
             <ul className="px-4">
@@ -52,7 +52,7 @@ const ContactsPanel: React.FC<ContactsPanelProps> = ({ friends, onOpenConversati
                         }`}
                       />
                     </div>
-                    <span className="text-fuchsia-300 truncate flex-grow">{friend.name}</span>
+                    <span className="text-lime-300 truncate flex-grow">{friend.name}</span>
                     {friend.onlineStatus !== 'online' && friend.lastActiveTimestamp && (
                         <span className="text-xs text-slate-500 flex-shrink-0">
                             {formatTimeAgo(friend.lastActiveTimestamp)}

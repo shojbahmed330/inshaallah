@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { AppView, User, Post, Comment, ScrollState, Notification, Campaign, Group, Story, Conversation, Call, VoiceState } from './types';
+import { AppView, User, VoiceState, Post, Comment, ScrollState, Notification, Campaign, Group, Story, Conversation, Call } from './types';
 import AuthScreen from './components/AuthScreen';
 import FeedScreen from './components/FeedScreen';
 import ExploreScreen from './components/ExploreScreen';
@@ -10,7 +10,8 @@ import { ProfileScreen } from './components/ProfileScreen';
 import SettingsScreen from './components/SettingsScreen';
 import PostDetailScreen from './components/PostDetailScreen';
 import FriendsScreen from './components/FriendsScreen';
-import { SearchResultsScreen } from './components/SearchResultsScreen';
+import SearchResultsScreen from './components/SearchResultsScreen';
+import VoiceCommandInput from './components/VoiceCommandInput';
 import NotificationPanel from './components/NotificationPanel';
 import Sidebar from './components/Sidebar';
 import Icon from './components/Icon';
@@ -30,6 +31,7 @@ import LiveVideoRoomScreen from './components/LiveVideoRoomScreen';
 import GroupsHubScreen from './components/GroupsHubScreen';
 import GroupPageScreen from './components/GroupPageScreen';
 import ManageGroupScreen from './components/ManageGroupScreen';
+// FIX: Changed to named import to resolve module error.
 import { GroupChatScreen } from './components/GroupChatScreen';
 import GroupEventsScreen from './components/GroupEventsScreen';
 import CreateEventScreen from './components/CreateEventScreen';
@@ -47,24 +49,11 @@ import IncomingCallModal from './components/IncomingCallModal';
 import CallScreen from './components/CallScreen';
 import CommentSheet from './components/CommentSheet';
 import ReportModal from './components/ReportModal';
-import VoiceIndicator from './components/VoiceIndicator';
-
-declare global {
-    interface Window {
-        SpeechRecognition: any;
-        webkitSpeechRecognition: any;
-    }
-}
 
 
 interface ViewState {
   view: AppView;
   props?: any;
-}
-
-export interface CommandResponse {
-  intent: string;
-  slots?: { [key: string]: string | number };
 }
 
 interface CommentSheetState {
@@ -174,10 +163,14 @@ const UserApp: React.FC = () => {
   const [isShowingAd, setIsShowingAd] = useState(false);
   const [campaignForAd, setCampaignForAd] = useState<Campaign | null>(null);
   const [viewingAd, setViewingAd] = useState<Post | null>(null);
+  const [voiceState, setVoiceState] = useState<VoiceState>(VoiceState.IDLE);
+  const [ttsMessage, setTtsMessage] = useState<string>('Say a command...');
+  const [lastCommand, setLastCommand] = useState<string | null>(null);
   const [scrollState, setScrollState] = useState<ScrollState>(ScrollState.NONE);
   const [headerSearchQuery, setHeaderSearchQuery] = useState('');
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
   const [isLoadingReels, setIsLoadingReels] = useState(true);
+  const [commandInputValue, setCommandInputValue] = useState('');
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [navigateToGroupId, setNavigateToGroupId] = useState<string | null>(null);
   const [initialDeepLink, setInitialDeepLink] = useState<ViewState | null>(null);
@@ -192,20 +185,13 @@ const UserApp: React.FC = () => {
   const [activeChats, setActiveChats] = useState<User[]>([]);
   const [minimizedChats, setMinimizedChats] = useState<Set<string>>(new Set());
   const [chatUnreadCounts, setChatUnreadCounts] = useState<Record<string, number>>({});
+  const [isChatRecording, setIsChatRecording] = useState(false);
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [commentSheetState, setCommentSheetState] = useState<CommentSheetState | null>(null);
   const [imageViewerInitialUrl, setImageViewerInitialUrl] = useState<string | null>(null);
-
-  // --- Voice Control State ---
-  const [voiceState, setVoiceState] = useState<VoiceState>(VoiceState.IDLE);
-  const [lastCommand, setLastCommand] = useState<string | null>(null);
-  const [lastCommandResponse, setLastCommandResponse] = useState<CommandResponse | null>(null);
-  const [interimTranscript, setInterimTranscript] = useState('');
-  const [ttsMessage, setTtsMessage] = useState('');
   
   const userRef = useRef(user);
   userRef.current = user;
-  const recognitionRef = useRef<any | null>(null);
   
   const activeChatsRef = useRef(activeChats);
   activeChatsRef.current = activeChats;
@@ -215,6 +201,7 @@ const UserApp: React.FC = () => {
 
   const notificationPanelRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null); // To hold the active speech recognition instance
   const viewerPostUnsubscribe = useRef<(() => void) | null>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const currentView = viewStack[viewStack.length - 1];
@@ -273,29 +260,6 @@ const UserApp: React.FC = () => {
     });
   }, [user]);
 
-  const handleOpenProfile = useCallback((username: string) => navigate(AppView.PROFILE, { username }), [navigate]);
-  
-  const handleNavigation = useCallback((viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'menu') => {
-    setNotificationPanelOpen(false);
-    switch(viewName) {
-        case 'feed': setViewStack([{ view: AppView.FEED }]); break;
-        case 'explore': setViewStack([{ view: AppView.EXPLORE }]); break;
-        case 'reels': setViewStack([{ view: AppView.REELS }]); break;
-        case 'friends': setViewStack([{ view: AppView.FRIENDS }]); break;
-        case 'settings': navigate(AppView.SETTINGS); break;
-        case 'profile': if (user) navigate(AppView.PROFILE, { username: user.username }); break;
-        case 'messages': setViewStack([{ view: AppView.CONVERSATIONS }]); break;
-        case 'ads_center': setViewStack([{ view: AppView.ADS_CENTER }]); break;
-        case 'rooms': setViewStack([{ view: AppView.ROOMS_HUB }]); break;
-        case 'groups': setViewStack([{ view: AppView.GROUPS_HUB }]); break;
-        case 'menu': navigate(AppView.MOBILE_MENU); break;
-    }
-  }, [user, navigate]);
-
-  const handleStartCreatePost = useCallback((props: any = {}) => {
-    navigate(AppView.CREATE_POST, props);
-  }, [navigate]);
-
   useEffect(() => {
     if (!user) return;
 
@@ -314,6 +278,7 @@ const UserApp: React.FC = () => {
             const isAlreadyActive = activeChatsRef.current.some(c => c.id === convoWithNewMessage.peer.id);
             const isMobile = window.innerWidth < 768;
 
+            // Only auto-open if it's NOT the initial load and NOT on a mobile device.
             if (!isAlreadyActive && !isFirstConversationLoad.current && !isMobile) {
                 handleOpenConversation(convoWithNewMessage.peer);
             }
@@ -326,6 +291,7 @@ const UserApp: React.FC = () => {
             }
         });
 
+        // Set this flag to false after the first execution.
         if (isFirstConversationLoad.current) {
             isFirstConversationLoad.current = false;
         }
@@ -372,6 +338,7 @@ const UserApp: React.FC = () => {
   
     const handleHidePost = (postId: string) => {
         setHiddenPostIds(prev => new Set(prev).add(postId));
+        setTtsMessage("Post hidden. It will not be shown again during this session.");
     };
 
     const handleSavePost = async (post: Post, isSaving: boolean) => {
@@ -381,6 +348,7 @@ const UserApp: React.FC = () => {
             : await geminiService.unsavePost(user.id, post.id);
         
         if (success) {
+            // Update the user state optimistically
             setUser(prevUser => {
                 if (!prevUser) return null;
                 const currentSavedIds = new Set(prevUser.savedPostIds || []);
@@ -391,30 +359,42 @@ const UserApp: React.FC = () => {
                 }
                 return { ...prevUser, savedPostIds: Array.from(currentSavedIds) };
             });
+
+            setTtsMessage(isSaving ? "Post saved." : "Post unsaved.");
+        } else {
+            setTtsMessage("Could not save post. Please try again.");
         }
     };
 
     const handleCopyLink = (post: Post) => {
         const postUrl = `${window.location.origin}${window.location.pathname}#/post/${post.id}`;
         navigator.clipboard.writeText(postUrl).then(() => {
-            console.log("Link copied");
+            setTtsMessage("Link copied to clipboard!");
         }).catch(() => {
-            console.error("Failed to copy link");
+            setTtsMessage("Failed to copy link.");
         });
     };
 
     const handleReportPost = (post: Post) => {
         setReportModalContent({ content: post, contentType: 'post' });
+        setTtsMessage("Please state the reason for reporting this post.");
     };
 
     const handleReportComment = (comment: Comment) => {
         setReportModalContent({ content: comment, contentType: 'comment' });
+        setTtsMessage("Please state the reason for reporting this comment.");
     };
 
     const handleSubmitReport = async (reason: string) => {
         if (!reportModalContent || !user) return;
         
-        await geminiService.createReport(user, reportModalContent.content, reportModalContent.contentType, reason);
+        const success = await geminiService.createReport(user, reportModalContent.content, reportModalContent.contentType, reason);
+
+        if (success) {
+            setTtsMessage("Thank you for your report. We will review it shortly.");
+        } else {
+            setTtsMessage("Sorry, there was an error submitting your report.");
+        }
         setReportModalContent(null);
     };
 
@@ -431,6 +411,7 @@ const UserApp: React.FC = () => {
       };
   }, []);
 
+  // Effect 1: Handles authentication state changes. Only sets the current user ID or handles logout.
   useEffect(() => {
     const unsubscribeAuth = firebaseService.onAuthStateChanged((userAuth) => {
         setCurrentUserId(userAuth?.id || null);
@@ -450,6 +431,7 @@ const UserApp: React.FC = () => {
     return () => unsubscribeAuth();
   }, []);
 
+  // Effect 2: Listens to the current user's profile document once we have a user ID.
   useEffect(() => {
       if (!currentUserId) return;
 
@@ -461,6 +443,9 @@ const UserApp: React.FC = () => {
               setUser(userProfile);
 
               if (isFirstLoad) {
+                  if (!initialDeepLink) {
+                      setTtsMessage(getTtsPrompt('login_success', language, { name: userProfile.name }));
+                  }
                   if (initialDeepLink) {
                       setViewStack([initialDeepLink]);
                       setInitialDeepLink(null);
@@ -480,6 +465,7 @@ const UserApp: React.FC = () => {
       return () => unsubscribeUserDoc();
   }, [currentUserId, initialDeepLink, language, handleLogout]);
 
+  // Effect 3: Manages data subscriptions that depend only on the user's ID.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -511,6 +497,8 @@ const UserApp: React.FC = () => {
     };
   }, [user?.id]);
 
+  // Effect 4: Manages data subscriptions that depend on friend/block lists.
+  // This effect will ONLY re-run if the content of friendIds or blockedUserIds changes.
   useEffect(() => {
     if (!user?.id) return;
 
@@ -523,6 +511,9 @@ const UserApp: React.FC = () => {
     });
     unsubscribes.push(unsubscribePosts);
     
+    // --- FETCH FRIENDS (NO POLLING) ---
+    // The previous polling logic was causing permission errors. 
+    // This fetches friends once when the friend list changes, making the app more stable.
     let isMounted = true;
     const fetchFriends = async () => {
         if (!user?.id) return;
@@ -544,172 +535,19 @@ const UserApp: React.FC = () => {
     };
   }, [user?.id, JSON.stringify(userFriendIds), JSON.stringify(userBlockedIds)]);
 
+
+  useEffect(() => {
+    setTtsMessage(getTtsPrompt('welcome', language));
+  }, [language]);
+
+  
   useEffect(() => {
     if (!user && !isAuthLoading && currentView?.view !== AppView.AUTH) {
         setViewStack([{ view: AppView.AUTH }]);
     }
   }, [user, isAuthLoading, currentView]);
 
-    const onCommandProcessed = useCallback(() => {
-        setLastCommand(null);
-        setLastCommandResponse(null);
-    }, []);
-
-    const handleCommand = useCallback(async (command: string) => {
-        setVoiceState(VoiceState.PROCESSING);
-        setTtsMessage('');
-        try {
-            const intentResponse = await geminiService.processIntent(command);
-            setLastCommand(command);
-            setLastCommandResponse(intentResponse);
-
-            switch(intentResponse.intent) {
-                case 'intent_open_feed': handleNavigation('feed'); break;
-                case 'intent_open_friends_page': handleNavigation('friends'); break;
-                case 'intent_open_messages': handleNavigation('messages'); break;
-                case 'intent_open_settings': handleNavigation('settings'); break;
-                case 'intent_open_profile':
-                    const targetName = intentResponse.slots?.target_name as string;
-                    if (targetName && (targetName.toLowerCase() === 'my' || targetName.toLowerCase() === 'amar')) {
-                         if (user) navigate(AppView.PROFILE, { username: user.username });
-                    } else if (targetName) {
-                        // Let profile screen handle specific user search
-                    } else {
-                        if (user) navigate(AppView.PROFILE, { username: user.username });
-                    }
-                    break;
-                case 'intent_go_back': goBack(); break;
-            }
-
-        } catch (error) {
-            console.error("Error processing intent:", error);
-            setTtsMessage(getTtsPrompt('error_generic', language));
-            onCommandProcessed();
-        } finally {
-            // After processing, return to passive listening, not active.
-            setVoiceState(VoiceState.PASSIVE_LISTENING);
-        }
-    }, [user, navigate, goBack, language, onCommandProcessed, handleNavigation]);
-
-    // This effect manages the entire lifecycle of the SpeechRecognition object.
-    useEffect(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            console.warn("Speech Recognition not supported in this browser.");
-            setVoiceState(VoiceState.IDLE);
-            return;
-        }
-
-        if (!recognitionRef.current) {
-            recognitionRef.current = new SpeechRecognition();
-        }
-        
-        const recognition = recognitionRef.current;
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = language === 'bn' ? 'bn-BD' : 'en-US';
-
-        const commandTimeoutRef = React.createRef<number | null>();
-        
-        recognition.onstart = () => {
-             // Only set to passive if not already in an active state.
-            if (voiceState !== VoiceState.ACTIVE_LISTENING && voiceState !== VoiceState.PROCESSING) {
-                setVoiceState(VoiceState.PASSIVE_LISTENING);
-            }
-        };
-
-        recognition.onend = () => {
-            // The 'onend' event fires automatically when speech stops, or on error.
-            // We restart it unless the state is 'IDLE', which signifies it was stopped intentionally (e.g., on unmount).
-            if (voiceState !== VoiceState.IDLE) {
-                try {
-                    recognition.start();
-                } catch (e) {
-                     if (e.name !== 'InvalidStateError') {
-                        console.error("Recognition restart error on end:", e);
-                    }
-                }
-            }
-        };
-        
-        recognition.onerror = (event: any) => {
-            console.error('Speech recognition error', event.error);
-            if (event.error === 'not-allowed') {
-                setVoiceState(VoiceState.IDLE);
-                setTtsMessage("Microphone access was denied. Voice control is disabled.");
-            }
-        };
-
-        recognition.onresult = (event: any) => {
-            let finalTranscript = '';
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interim += event.results[i][0].transcript;
-                }
-            }
-            
-            setInterimTranscript(interim);
-            const fullTranscript = (finalTranscript + interim).toLowerCase().trim();
-            
-            if (commandTimeoutRef.current) {
-                clearTimeout(commandTimeoutRef.current);
-            }
-
-            if (voiceState === VoiceState.ACTIVE_LISTENING) {
-                 if (finalTranscript.trim()) {
-                    handleCommand(finalTranscript.trim());
-                 } else if(fullTranscript.trim()){
-                     commandTimeoutRef.current = window.setTimeout(() => {
-                         handleCommand(fullTranscript.trim());
-                     }, 1500); 
-                 }
-            } else { // Passive listening for hotword
-                const hotwords = ['hey voicebook', 'voice book', 'hay voicebook', 'হেই ভয়েসবুক'];
-                if (hotwords.some(hotword => fullTranscript.includes(hotword))) {
-                    setVoiceState(VoiceState.ACTIVE_LISTENING);
-                    setTtsMessage("Listening...");
-                    setInterimTranscript(''); // Clear hotword from transcript
-                }
-            }
-        };
-        
-        // Start recognition if it's currently idle. This will trigger on first load.
-        if (voiceState === VoiceState.IDLE) {
-            try {
-                recognition.start();
-            } catch (e) {
-                 if (e.name !== 'InvalidStateError') { // It might already be starting, which is fine
-                    console.error("Could not start recognition:", e);
-                }
-            }
-        }
-    // We only want to re-run this setup if a dependency that changes behavior is updated.
-    // 'user' is not needed as handleCommand's closure will be updated.
-    }, [voiceState, language, handleCommand]);
-
-    // Separate effect for cleanup on component unmount
-    useEffect(() => {
-        return () => {
-            if (recognitionRef.current) {
-                // To properly stop it, we signal to `onend` not to restart by setting state to IDLE first.
-                setVoiceState(VoiceState.IDLE);
-                recognitionRef.current.stop();
-                console.log("Recognition stopped on unmount.");
-            }
-        }
-    }, []);
-    
-    useEffect(() => {
-        if (ttsMessage) {
-            window.speechSynthesis.cancel(); // Cancel any previous speech
-            const utterance = new SpeechSynthesisUtterance(ttsMessage);
-            utterance.lang = language === 'bn' ? 'bn-BD' : 'en-US';
-            window.speechSynthesis.speak(utterance);
-        }
-    }, [ttsMessage, language]);
+  
 
   const handleCloseChat = useCallback((peerId: string) => {
       setActiveChats(prev => prev.filter(c => c.id !== peerId));
@@ -731,6 +569,82 @@ const UserApp: React.FC = () => {
           return newSet;
       });
   }, []);
+
+  const handleCommand = useCallback((command: string) => {
+    setVoiceState(VoiceState.PROCESSING);
+    setScrollState(ScrollState.NONE);
+    setLastCommand(command);
+    setCommandInputValue('');
+  }, []);
+
+  const handleCommandProcessed = useCallback(() => {
+    setLastCommand(null);
+    setVoiceState(VoiceState.IDLE);
+  }, []);
+
+  const handleMicClick = useCallback(() => {
+    if (isChatRecording) {
+      setTtsMessage("In-chat voice message is currently recording.");
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setTtsMessage(getTtsPrompt('error_no_speech_rec', language));
+      return;
+    }
+
+    if (voiceState === VoiceState.LISTENING) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      return;
+    }
+
+    if (voiceState === VoiceState.PROCESSING) {
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+
+    recognition.lang = 'bn-BD, en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setVoiceState(VoiceState.LISTENING);
+      setCommandInputValue(''); 
+      setTtsMessage("Listening...");
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      setVoiceState(currentVoiceState => {
+        if (currentVoiceState === VoiceState.LISTENING) { 
+            return VoiceState.IDLE;
+        }
+        return currentVoiceState;
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error', event.error);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setTtsMessage(getTtsPrompt('error_mic_permission', language));
+      } else {
+        setTtsMessage(getTtsPrompt('error_generic', language));
+      }
+    };
+
+    recognition.onresult = (event: any) => {
+      const command = event.results[0][0].transcript;
+      handleCommand(command);
+    };
+
+    recognition.start();
+  }, [voiceState, handleCommand, language, isChatRecording]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -772,6 +686,7 @@ const UserApp: React.FC = () => {
             break;
         case 'friend_request_approved':
             if (notification.user?.username) {
+                setTtsMessage(`${notification.user.name} accepted your friend request.`);
                 navigate(AppView.PROFILE, { username: notification.user.username });
             }
             break;
@@ -793,6 +708,7 @@ const UserApp: React.FC = () => {
         case 'admin_announcement':
         case 'admin_warning':
             if (notification.message) {
+                setTtsMessage(notification.message);
                 alert(`[Admin Message] ${notification.message}`);
             }
             break;
@@ -827,14 +743,18 @@ const UserApp: React.FC = () => {
                   voiceCoins: (prevUser.voiceCoins || 0) + REWARD_AD_COIN_VALUE
               };
           });
+          setTtsMessage(getTtsPrompt('reward_claim_success', language, { coins: REWARD_AD_COIN_VALUE }));
           if (campaignId) {
           }
+      } else {
+          setTtsMessage(getTtsPrompt('transaction_failed', language));
       }
   };
 
   const handleAdSkip = () => {
     setIsShowingAd(false);
     setCampaignForAd(null);
+    setTtsMessage("Ad skipped. No reward was earned.");
   };
 
   const handleDeductCoinsForImage = async (): Promise<boolean> => {
@@ -848,24 +768,35 @@ const UserApp: React.FC = () => {
     await firebaseService.trackAdClick(post.campaignId);
     
     if (post.allowLeadForm) {
+        setTtsMessage(getTtsPrompt('lead_form_opened', language));
         setLeadFormPost(post);
     } else if (post.websiteUrl) {
+        setTtsMessage(`Opening link for ${post.sponsorName}...`);
         window.open(post.websiteUrl, '_blank', 'noopener,noreferrer');
     } else if (post.allowDirectMessage && post.sponsorId) {
         const sponsorUser = await firebaseService.getUserProfileById(post.sponsorId);
         if (sponsorUser) {
+            setTtsMessage(`Opening conversation with ${sponsorUser.name}.`);
             await handleOpenConversation(sponsorUser);
+        } else {
+            setTtsMessage(`Could not find sponsor ${post.sponsorName}.`);
         }
     } else if (post.sponsorId) {
         const sponsorUser = await firebaseService.getUserProfileById(post.sponsorId);
         if (sponsorUser) {
+            setTtsMessage(`Opening profile for ${sponsorUser.name}.`);
             navigate(AppView.PROFILE, { username: sponsorUser.username });
+        } else {
+            setTtsMessage(`Could not find sponsor ${post.sponsorName}.`);
         }
+    } else {
+        setTtsMessage(`Thank you for your interest in ${post.sponsorName}.`);
     }
   };
 
   const handleLeadSubmit = async (leadData: { name: string, email: string, phone: string }) => {
     if (!user || !leadFormPost || !leadFormPost.campaignId || !leadFormPost.sponsorId) {
+        setTtsMessage(getTtsPrompt('lead_form_error', language));
         return;
     }
     
@@ -879,24 +810,35 @@ const UserApp: React.FC = () => {
             createdAt: new Date().toISOString(),
         });
         setLeadFormPost(null);
+        setTtsMessage(getTtsPrompt('lead_form_submitted', language));
     } catch (error) {
         console.error("Failed to submit lead:", error);
+        setTtsMessage(getTtsPrompt('lead_form_error', language));
     }
+  };
+
+  const handleStartCreatePost = (props: any = {}) => {
+    navigate(AppView.CREATE_POST, props);
   };
   
   const handlePostCreated = (newPost: Post | null) => {
     goBack();
+    setTtsMessage(getTtsPrompt('post_success', language));
   };
 
   const handleReelCreated = () => {
     goBack();
+    setTtsMessage("Your Reel has been posted!");
   };
 
   const handleStoryCreated = (newStory: Story) => {
     goBack();
+    setTtsMessage(getTtsPrompt('story_created', language));
   }
   
   const handleGroupCreated = (newGroup: Group) => {
+    // Optimistically update the local state so the new group appears immediately
+    // This ensures that when the user navigates back, the group is in the list.
     setGroups(prevGroups => [newGroup, ...prevGroups.filter(g => g.id !== newGroup.id)]);
     navigate(AppView.GROUP_PAGE, { groupId: newGroup.id });
   };
@@ -920,7 +862,10 @@ const UserApp: React.FC = () => {
   
   const handleReactToPost = async (postId: string, emoji: string) => {
     if (!user) return;
-    await firebaseService.reactToPost(postId, user.id, emoji);
+    const success = await firebaseService.reactToPost(postId, user.id, emoji);
+    if (!success) {
+      setTtsMessage(`Could not react. You may be offline.`);
+    }
   };
 
   const handleReactToImage = async (postId: string, imageId: string, emoji: string) => {
@@ -936,6 +881,7 @@ const UserApp: React.FC = () => {
   const handlePostComment = async (postId: string, text: string, parentId: string | null = null, imageId?: string) => {
     if (!user || !text.trim()) return;
     if (user.commentingSuspendedUntil && new Date(user.commentingSuspendedUntil) > new Date()) {
+        setTtsMessage(getTtsPrompt('comment_suspended', language));
         return;
     }
     await firebaseService.createComment(user, postId, { text, parentId, imageId });
@@ -955,9 +901,12 @@ const UserApp: React.FC = () => {
     if (!user) return;
     const success = await firebaseService.deletePost(postId, user.id);
     if (success) {
+      setTtsMessage("Your post has been successfully deleted.");
       if (currentView.view === AppView.POST_DETAILS && currentView.props?.postId === postId) {
           goBack();
       }
+    } else {
+      setTtsMessage("Failed to delete post. You may not be the author or a connection error occurred.");
     }
   };
 
@@ -972,15 +921,18 @@ const UserApp: React.FC = () => {
     if (navigator.share) {
         try {
             await navigator.share(shareData);
+            setTtsMessage("Post shared successfully!");
         } catch (err) {
             console.log("Web Share API was cancelled or failed.", err);
         }
     } else {
         setShareModalPost(post);
+        setTtsMessage("Share options are now open.");
     }
   };
 
   const handleOpenPhotoViewer = (post: Post, initialUrl?: string) => {
+    // FIX: Property 'imageUrls' does not exist on type 'Post'. Replaced with 'imageDetails' and corrected logic to correctly select an array of image URLs.
     let allUrls: string[] = [];
     if (post.imageDetails && post.imageDetails.length > 0) {
       allUrls = post.imageDetails.map(detail => detail.url);
@@ -1006,6 +958,7 @@ const UserApp: React.FC = () => {
             if (updatedPost) {
                 setViewerPost(updatedPost);
             } else {
+                setTtsMessage("This post is no longer available.");
                 handleClosePhotoViewer(); 
             }
         });
@@ -1013,13 +966,16 @@ const UserApp: React.FC = () => {
     }
   };
 
-  const handleEditProfile = () => navigate(AppView.SETTINGS);
+  const handleOpenProfile = (username: string) => navigate(AppView.PROFILE, { username });
+  const handleViewPost = (postId: string) => navigate(AppView.POST_DETAILS, { postId });
+  const handleEditProfile = () => navigate(AppView.SETTINGS, { ttsMessage: getTtsPrompt('settings_opened', language) });
   
   const handleBlockUser = async (userToBlock: User) => {
       if (!user) return;
       const success = await geminiService.blockUser(user.id, userToBlock.id);
       if (success) {
           setUser(u => u ? { ...u, blockedUserIds: [...u.blockedUserIds, userToBlock.id] } : null);
+          setTtsMessage(getTtsPrompt('user_blocked', language, { name: userToBlock.name }));
           goBack();
       }
   };
@@ -1029,6 +985,7 @@ const UserApp: React.FC = () => {
       const success = await geminiService.unblockUser(user.id, userToUnblock.id);
       if (success) {
           setUser(u => u ? { ...u, blockedUserIds: u.blockedUserIds.filter(id => id !== userToUnblock.id) } : null);
+          setTtsMessage(getTtsPrompt('user_unblocked', language, { name: userToUnblock.name }));
       }
   };
 
@@ -1036,9 +993,27 @@ const UserApp: React.FC = () => {
       if (!user) return;
       const success = await geminiService.deactivateAccount(user.id);
       if (success) {
+          setTtsMessage(getTtsPrompt('account_deactivated', language));
           handleLogout();
       }
   };
+
+  const handleNavigation = (viewName: 'feed' | 'explore' | 'reels' | 'friends' | 'settings' | 'profile' | 'messages' | 'ads_center' | 'rooms' | 'groups' | 'menu') => {
+    setNotificationPanelOpen(false);
+    switch(viewName) {
+        case 'feed': setViewStack([{ view: AppView.FEED }]); break;
+        case 'explore': setViewStack([{ view: AppView.EXPLORE }]); break;
+        case 'reels': setViewStack([{ view: AppView.REELS }]); break;
+        case 'friends': setViewStack([{ view: AppView.FRIENDS }]); break;
+        case 'settings': navigate(AppView.SETTINGS); break;
+        case 'profile': if (user) navigate(AppView.PROFILE, { username: user.username }); break;
+        case 'messages': setViewStack([{ view: AppView.CONVERSATIONS }]); break;
+        case 'ads_center': setViewStack([{ view: AppView.ADS_CENTER }]); break;
+        case 'rooms': setViewStack([{ view: AppView.ROOMS_HUB }]); break;
+        case 'groups': setViewStack([{ view: AppView.GROUPS_HUB }]); break;
+        case 'menu': navigate(AppView.MOBILE_MENU); break;
+    }
+  }
   
   const handleHeaderSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1070,25 +1045,20 @@ const UserApp: React.FC = () => {
     if (isAuthLoading) {
         return <div className="flex items-center justify-center h-full text-fuchsia-400">Loading VoiceBook...</div>;
     }
-
-    const commonProps = {
-        lastCommand,
-        lastCommandResponse,
-        onCommandProcessed,
-        ttsMessage,
-        onSetTtsMessage: setTtsMessage,
-    };
-    
     if (!user) {
         return <AuthScreen 
-            {...commonProps}
+            onSetTtsMessage={setTtsMessage}
+            lastCommand={lastCommand}
+            onCommandProcessed={handleCommandProcessed}
             initialAuthError={globalAuthError}
         />;
     }
 
     const commonScreenProps = {
-      ...commonProps,
       currentUser: user,
+      onSetTtsMessage: setTtsMessage,
+      lastCommand: lastCommand,
+      onCommandProcessed: handleCommandProcessed,
       scrollState: scrollState,
       onSetScrollState: setScrollState,
       onGoBack: goBack,
@@ -1102,7 +1072,9 @@ const UserApp: React.FC = () => {
     switch (currentView.view) {
       case AppView.AUTH:
         return <AuthScreen
-            {...commonProps}
+            onSetTtsMessage={setTtsMessage}
+            lastCommand={lastCommand}
+            onCommandProcessed={handleCommandProcessed}
             initialAuthError={globalAuthError}
         />;
       case AppView.FEED:
@@ -1185,7 +1157,17 @@ const UserApp: React.FC = () => {
                 {renderView()}
             </div>
         </main>
-        <VoiceIndicator voiceState={voiceState} interimTranscript={interimTranscript} />
+        <footer className="flex-shrink-0">
+            <VoiceCommandInput
+                onSendCommand={handleCommand}
+                voiceState={voiceState}
+                onMicClick={handleMicClick}
+                value={commandInputValue}
+                onValueChange={setCommandInputValue}
+                placeholder={ttsMessage}
+                isChatRecording={isChatRecording}
+            />
+        </footer>
       </div>
     );
   }
@@ -1199,6 +1181,9 @@ const UserApp: React.FC = () => {
           friendRequestCount={friendRequestCount}
           activeView={currentView.view}
           voiceCoins={user.voiceCoins || 0}
+          voiceState={voiceState}
+          onMicClick={handleMicClick}
+          isChatRecording={isChatRecording}
         />
       )}
       
@@ -1306,13 +1291,13 @@ const UserApp: React.FC = () => {
             chatUnreadCounts={chatUnreadCounts}
             onCloseChat={handleCloseChat}
             onMinimizeToggle={handleMinimizeToggle}
+            setIsChatRecording={setIsChatRecording}
             onNavigate={navigate}
+            onSetTtsMessage={setTtsMessage}
             onBlockUser={handleBlockUser}
           />
       )}
       
-      <VoiceIndicator voiceState={voiceState} interimTranscript={interimTranscript} />
-
       {isShowingAd && campaignForAd && (
         <AdModal campaign={campaignForAd} onComplete={handleAdComplete} onSkip={handleAdSkip} />
       )}
@@ -1320,7 +1305,7 @@ const UserApp: React.FC = () => {
         <CampaignViewerModal post={viewingAd} onClose={() => setViewingAd(null)} />
       )}
        {shareModalPost && (
-         <ShareModal post={shareModalPost} onClose={() => setShareModalPost(null)} />
+         <ShareModal post={shareModalPost} onClose={() => setShareModalPost(null)} onSetTtsMessage={setTtsMessage} />
       )}
        {leadFormPost && (
          <LeadFormModal post={leadFormPost} currentUser={user} onClose={() => setLeadFormPost(null)} onSubmit={handleLeadSubmit} />
@@ -1385,6 +1370,13 @@ const UserApp: React.FC = () => {
             onNavigate={handleNavigation}
             friendRequestCount={friendRequestCount}
             activeView={currentView.view}
+            voiceState={voiceState}
+            onMicClick={handleMicClick}
+            onSendCommand={handleCommand}
+            commandInputValue={commandInputValue}
+            setCommandInputValue={setCommandInputValue}
+            ttsMessage={ttsMessage}
+            isChatRecording={isChatRecording}
         />
       )}
     </div>

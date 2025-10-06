@@ -20,18 +20,16 @@ const VoiceCommandInput: React.FC<VoiceCommandInputProps> = ({ onSendCommand, vo
     }
   };
 
-  const isListening = voiceState === VoiceState.ACTIVE_LISTENING;
+  const isListening = voiceState === VoiceState.LISTENING;
   const hasText = value.trim().length > 0;
 
   const getIndicatorColor = () => {
     if (isChatRecording) return 'text-slate-500';
     switch (voiceState) {
-      case VoiceState.ACTIVE_LISTENING:
+      case VoiceState.LISTENING:
         return 'text-rose-500 animate-pulse';
       case VoiceState.PROCESSING:
         return 'text-yellow-500';
-      case VoiceState.PASSIVE_LISTENING:
-        return 'text-fuchsia-400 animate-pulse';
       default:
         return 'text-fuchsia-400';
     }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthMode } from '../types';
 import { firebaseService } from '../services/firebaseService';
@@ -10,16 +11,14 @@ interface AuthScreenProps {
   lastCommand: string | null;
   onCommandProcessed: () => void;
   initialAuthError?: string;
-  ttsMessage: string;
 }
 
-const AuthScreen: React.FC<AuthScreenProps> = ({ onSetTtsMessage, lastCommand, onCommandProcessed, initialAuthError, ttsMessage }) => {
+const AuthScreen: React.FC<AuthScreenProps> = ({ 
+  onSetTtsMessage, lastCommand, onCommandProcessed, initialAuthError
+}) => {
   const [mode, setMode] = useState<AuthMode>(AuthMode.LOGIN);
   
-  // State for login
   const [identifier, setIdentifier] = useState('');
-
-  // State for signup
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -64,7 +63,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onSetTtsMessage, lastCommand, o
                     onSetTtsMessage(getTtsPrompt('login_password', language));
                 } else {
                     await firebaseService.signInWithEmail(identifier, cleanedText);
-                    // onAuthSuccess is handled by the onAuthStateChanged listener in UserApp.
                 }
                 break;
             case AuthMode.SIGNUP_FULLNAME:
@@ -119,67 +117,65 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onSetTtsMessage, lastCommand, o
         }
       } catch (error: any) {
           console.error("Auth error:", error);
-          setAuthError(error.message || "An unexpected error occurred.");
-          onSetTtsMessage(error.message || "An unexpected error occurred.");
+          const errorMessage = error.message || "An unexpected error occurred.";
+          setAuthError(errorMessage);
+          onSetTtsMessage(errorMessage);
           if (mode === AuthMode.LOGIN) {
-            setIdentifier(''); 
+            setIdentifier('');
           }
       } finally {
           setIsLoading(false);
       }
-  }, [mode, identifier, password, onSetTtsMessage, language, email, fullName, username]);
-
+  }, [mode, identifier, password, email, fullName, username, onSetTtsMessage, language]);
 
   useEffect(() => {
     if (!lastCommand) return;
     
-    const isLoginCommand = ['log in', 'login', 'login koro', 'লগইন'].some(c => lastCommand.toLowerCase().includes(c));
-    const isSignupCommand = ['sign up', 'signup', 'register', 'সাইন আপ', 'রেজিস্টার'].some(c => lastCommand.toLowerCase().includes(c));
+    const isLoginCommand = ['log in', 'login', 'login koro'].includes(lastCommand.toLowerCase());
+    const isSignupCommand = ['sign up', 'signup', 'register'].includes(lastCommand.toLowerCase());
 
     if (isLoginCommand) {
         resetSignupState();
         setMode(AuthMode.LOGIN);
         onSetTtsMessage(getTtsPrompt('login_prompt', language));
+        onCommandProcessed();
     } else if (isSignupCommand) {
         resetSignupState();
         setMode(AuthMode.SIGNUP_FULLNAME);
         onSetTtsMessage(getTtsPrompt('signup_fullname', language));
+        onCommandProcessed();
     } else {
-        handleTextInput(lastCommand);
+        handleTextInput(lastCommand).finally(onCommandProcessed);
     }
-    onCommandProcessed();
   }, [lastCommand, handleTextInput, onSetTtsMessage, onCommandProcessed, language]);
   
   const renderSignupProgress = () => {
     if (mode === AuthMode.LOGIN) return null;
     return (
-        <div className="mt-4 text-left text-sm space-y-1">
-           {fullName && <p className="text-slate-400">Full Name: <span className="text-slate-200">{fullName}</span></p>}
-           {username && <p className="text-slate-400">Username: <span className="text-slate-200">@{username}</span></p>}
-           {email && <p className="text-slate-400">Email: <span className="text-slate-200">{email}</span></p>}
-           {password && <p className="text-slate-400">Password: <span className="text-slate-200">********</span></p>}
+        <div className="mt-4 text-left text-sm space-y-1 p-3 border border-lime-500/20 rounded-md bg-gray-900/30">
+           {fullName && <p className="text-lime-400/80">Full Name: <span className="text-lime-300">{fullName}</span></p>}
+           {username && <p className="text-lime-400/80">Username: <span className="text-lime-300">@{username}</span></p>}
+           {email && <p className="text-lime-400/80">Email: <span className="text-lime-300">{email}</span></p>}
+           {password && <p className="text-lime-400/80">Password: <span className="text-lime-300">********</span></p>}
         </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center text-fuchsia-400 p-4 sm:p-8 bg-black">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(217,70,239,0.3),rgba(255,255,255,0))] opacity-20 pointer-events-none"></div>
-      
-      <Icon name="logo" className="w-24 h-24 text-fuchsia-400 mb-4 text-shadow-lg" />
+    <div className="flex flex-col items-center justify-center h-full text-center text-lime-400 p-4 sm:p-8 bg-black">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(57,255,20,0.3),rgba(255,255,255,0))] opacity-20 pointer-events-none"></div>
+
+      <Icon name="logo" className="w-24 h-24 text-lime-400 mb-4 text-shadow-lg" />
       <h1 className="text-5xl font-bold mb-2 text-shadow-lg">VoiceBook</h1>
-      <p className="text-fuchsia-400/80 mb-8 animate-pulse">The Social Experience</p>
+      <p className="text-lime-400/80 mb-8 animate-pulse">[[ A U T H E N T I C A T E ]]</p>
       
-      <div className="bg-slate-800/50 rounded-lg p-6 w-full max-w-sm shadow-2xl border border-fuchsia-500/20">
-        <p className={`font-semibold text-lg min-h-[3em] flex items-center justify-center transition-colors ${authError ? 'text-red-400' : 'text-fuchsia-300'}`}>
-          {isLoading ? 'Processing...' : (authError || ttsMessage)}
-        </p>
-        { (mode > AuthMode.LOGIN) && renderSignupProgress() }
-        { (mode === AuthMode.LOGIN && identifier) && <p className="text-slate-400 text-sm mt-4">Logging in as: <span className="text-slate-200">{identifier}</span></p> }
+      <div className="w-full max-w-sm">
+        <div className="min-h-[3em]">
+          {isLoading && <p className="animate-pulse">Processing...</p>}
+        </div>
+        {(mode > AuthMode.LOGIN) && renderSignupProgress()}
+        {(mode === AuthMode.LOGIN && identifier) && <p className="text-lime-400/70 text-sm mt-4">Logging in as: <span className="text-lime-300">{identifier}</span></p>}
       </div>
-       <div className="mt-6 text-slate-400 text-sm">
-            Say <span className="font-bold text-fuchsia-300">"Login"</span> or <span className="font-bold text-fuchsia-300">"Sign Up"</span> to begin.
-       </div>
     </div>
   );
 };

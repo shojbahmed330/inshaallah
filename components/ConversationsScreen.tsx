@@ -268,7 +268,7 @@ const ConversationsScreen: React.FC<{
       if (newPinnedIds.has(peerId)) newPinnedIds.delete(peerId);
       else newPinnedIds.add(peerId);
       setPinnedIds(newPinnedIds);
-// FIX: Cast Array.from(Set) to string[] to resolve TypeScript error.
+      // FIX: Cast Array.from(Set) to string[] to resolve TypeScript error.
       await updateProfileLists({ pinnedChatIds: Array.from(newPinnedIds) as string[] });
   };
 
@@ -299,7 +299,7 @@ const ConversationsScreen: React.FC<{
           }
       }
       setArchivedIds(newArchivedIds);
-// FIX: Cast Array.from(Set) to string[] to resolve TypeScript error.
+      // FIX: Cast Array.from(Set) to string[] to resolve TypeScript error.
       updateProfileLists({ archivedChatIds: Array.from(newArchivedIds) as string[], pinnedChatIds: Array.from(newPinnedIds) as string[] });
   };
   

@@ -1,9 +1,9 @@
 
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from './Icon';
 import { User, ScrollState } from '../types';
 import { geminiService } from '../services/geminiService';
+import { getTtsPrompt } from '../constants';
 import { useSettings } from '../contexts/SettingsContext';
 import { t } from '../i18n';
 
@@ -12,7 +12,10 @@ interface SettingsScreenProps {
   onUpdateSettings: (settings: Partial<User>) => Promise<void>;
   onUnblockUser: (user: User) => void;
   onDeactivateAccount: () => void;
+  lastCommand: string | null;
+  onSetTtsMessage: (message: string) => void;
   scrollState: ScrollState;
+  onCommandProcessed: () => void;
   onGoBack: () => void;
 }
 
@@ -60,7 +63,7 @@ const SettingRowSelect: React.FC<{ icon: React.ReactNode; title: string; value: 
 );
 
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSettings, onUnblockUser, onDeactivateAccount, scrollState, onGoBack }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSettings, onUnblockUser, onDeactivateAccount, lastCommand, onSetTtsMessage, scrollState, onCommandProcessed, onGoBack }) => {
   const { language, setLanguage } = useSettings();
   
   // Profile info state
@@ -94,6 +97,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSe
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
+    onSetTtsMessage(getTtsPrompt('settings_opened', language));
+    
     // Fetch full user objects for blocked IDs
     const fetchBlockedUsers = async () => {
         const users = await Promise.all(
@@ -102,7 +107,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSe
         setBlockedUsers(users.filter((u): u is User => u !== null));
     };
     fetchBlockedUsers();
-  }, [currentUser.blockedUserIds]);
+  }, [currentUser.blockedUserIds, onSetTtsMessage, language]);
 
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
@@ -146,7 +151,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSe
     };
     await onUpdateSettings(updatedSettings);
     setIsLoading(false);
-  }, [name, bio, work, education, currentCity, hometown, relationshipStatus, postVisibility, friendRequestPrivacy, friendListVisibility, notificationSettings, onUpdateSettings]);
+    onSetTtsMessage(getTtsPrompt('settings_saved', language));
+  }, [name, bio, work, education, currentCity, hometown, relationshipStatus, postVisibility, friendRequestPrivacy, friendListVisibility, notificationSettings, onUpdateSettings, onSetTtsMessage, language]);
 
   const handleChangePassword = async () => {
     setPasswordError('');
@@ -162,11 +168,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSe
     const success = await geminiService.changePassword(currentUser.id, currentPassword, newPassword);
     setIsLoading(false);
     if (success) {
+        onSetTtsMessage(getTtsPrompt('password_changed_success', language));
         setIsChangingPassword(false);
         setCurrentPassword('');
         setNewPassword('');
         setConfirmNewPassword('');
     } else {
+        onSetTtsMessage(getTtsPrompt('password_change_fail', language));
         setPasswordError("Your current password was incorrect.");
     }
   };
@@ -183,6 +191,93 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ currentUser, onUpdateSe
   const cancelDeactivation = () => {
       setIsDeactivationModalOpen(false);
   };
+
+
+  const handleCommand = useCallback(async (command: string) => {
+    try {
+        const intentResponse = await geminiService.processIntent(command);
+
+        switch(intentResponse.intent) {
+            case 'intent_go_back':
+                onGoBack();
+                break;
+            case 'intent_save_settings':
+                handleSave();
+                break;
+            case 'intent_update_profile':
+                if (intentResponse.slots?.field && intentResponse.slots?.value) {
+                    const { field, value } = intentResponse.slots;
+                    if (typeof value !== 'string') return;
+                    
+                    const fieldSetterMap: Record<string, (val: string) => void> = {
+                        name: setName,
+                        bio: setBio,
+                        work: setWork,
+                        education: setEducation,
+                        hometown: setHometown,
+                        currentCity: setCurrentCity,
+                        relationshipStatus: setRelationshipStatus as (val:string) => void,
+                    };
+
+                    const setter = fieldSetterMap[field as string];
+                    if(setter) {
+                        setter(value);
+                        onSetTtsMessage(getTtsPrompt('setting_updated_generic', language, { field: field as string, value }));
+                    }
+                }
+                break;
+            case 'intent_update_privacy':
+                 if (intentResponse.slots?.setting && intentResponse.slots?.value) {
+                    const { setting, value } = intentResponse.slots;
+                    if (setting === 'postVisibility' && (value === 'public' || value === 'friends')) {
+                        setPostVisibility(value as 'public' | 'friends');
+                        onSetTtsMessage(getTtsPrompt('privacy_setting_updated', language, { setting: 'Post visibility', value: value as string }));
+                    } else if (setting === 'friendRequestPrivacy' && (value === 'everyone' || value === 'friends_of_friends')) {
+                        setFriendRequestPrivacy(value as 'everyone' | 'friends_of_friends');
+                        onSetTtsMessage(getTtsPrompt('privacy_setting_updated', language, { setting: 'Friend request privacy', value: value as string }));
+                    }
+                }
+                break;
+            case 'intent_update_notification_setting':
+                if (intentResponse.slots?.setting && intentResponse.slots?.value) {
+                    const { setting, value } = intentResponse.slots;
+                    const isEnabled = value === 'on';
+                    const settingKey = setting as keyof typeof notificationSettings;
+                    if (settingKey in notificationSettings) {
+                        setNotificationSettings(s => ({ ...s, [settingKey]: isEnabled }));
+                        onSetTtsMessage(getTtsPrompt('notification_setting_updated', language, {setting: setting as string, value: value as string}));
+                    }
+                }
+                break;
+            case 'intent_unblock_user':
+                if (intentResponse.slots?.target_name) {
+                    const targetName = intentResponse.slots.target_name as string;
+                    const userToUnblock = blockedUsers.find(u => u.name.toLowerCase() === targetName.toLowerCase());
+                    if (userToUnblock) {
+                        onUnblockUser(userToUnblock);
+                    }
+                }
+                break;
+            case 'intent_change_password':
+                setIsChangingPassword(true);
+                onSetTtsMessage(getTtsPrompt('password_change_prompt', language));
+                break;
+            case 'intent_deactivate_account':
+                handleDeactivate();
+                break;
+        }
+    } catch (error) {
+        console.error("Error processing command in SettingsScreen:", error);
+    } finally {
+        onCommandProcessed();
+    }
+  }, [handleSave, onSetTtsMessage, blockedUsers, onUnblockUser, onCommandProcessed, onGoBack, notificationSettings, language]);
+
+  useEffect(() => {
+    if(lastCommand) {
+        handleCommand(lastCommand);
+    }
+  }, [lastCommand, handleCommand]);
 
   return (
     <div ref={scrollContainerRef} className="h-full w-full overflow-y-auto">

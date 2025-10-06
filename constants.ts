@@ -3,9 +3,6 @@
 import { FriendshipStatus, type User, type Post, type Message, type Comment, type ChatTheme, type AdminUser, type LiveAudioRoom, type LiveVideoRoom, type Campaign, type Group, type Event, type GroupChat, type GroupCategory, type MusicTrack, type Story, type StoryTextStyle } from './types';
 import { t, Language } from './i18n';
 
-// FIX: Added missing getTtsPrompt function used for voice commands throughout the app.
-export const getTtsPrompt = (key: string, lang: Language, options?: { [key: string]: string | number }): string => t(lang, key, options);
-
 export const CLOUDINARY_CLOUD_NAME = "deeieh2bd";
 export const CLOUDINARY_UPLOAD_PRESET = "Voicebook";
 export const IMAGE_GENERATION_COST = 60;
@@ -20,6 +17,33 @@ export const REEL_TEXT_FONTS = [
   { name: 'Serif', class: 'font-serif' },
   { name: 'Mono', class: 'font-mono' },
 ];
+
+export const getTtsPrompt = (key: string, lang: Language, options?: { [key: string]: string | number }): string => {
+    return t(lang, `tts.${key}`, options);
+};
+
+export const VOICE_EMOJI_MAP: Record<string, string> = {
+    laughing: '😂',
+    hashi: '😂',
+    heart: '❤️',
+    love: '❤️',
+    bhalobasha: '❤️',
+    like: '👍',
+    thumbsup: '👍',
+    sad: '😢',
+    crying: '😢',
+    kanna: '😢',
+    cry: '😢',
+    angry: '😡',
+    raag: '😡',
+    fire: '🔥',
+    agun: '🔥',
+    wow: '😮',
+    surprised: '😮',
+    smile: '😊',
+    happy: '😊',
+    inlove: '😍',
+};
 
 export const CHAT_THEMES: Record<ChatTheme, { name: string, bgGradient?: string; bgClass?: string; myBubble: string; theirBubble: string; text: string; headerText: string; }> = {
     default: {

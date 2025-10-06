@@ -11,7 +11,9 @@ interface ChatManagerProps {
   chatUnreadCounts: Record<string, number>;
   onCloseChat: (peerId: string) => void;
   onMinimizeToggle: (peerId: string) => void;
+  setIsChatRecording: (isRecording: boolean) => void;
   onNavigate: (view: AppView, props?: any) => void;
+  onSetTtsMessage: (message: string) => void;
   onBlockUser: (user: User) => void;
 }
 
@@ -23,7 +25,9 @@ const ChatManager: React.FC<ChatManagerProps> = ({
   chatUnreadCounts,
   onCloseChat,
   onMinimizeToggle,
+  setIsChatRecording,
   onNavigate,
+  onSetTtsMessage,
   onBlockUser,
 }) => {
   const friendsMap = useMemo(() => {
@@ -57,7 +61,9 @@ const ChatManager: React.FC<ChatManagerProps> = ({
             onHeaderClick={onMinimizeToggle}
             isMinimized={true}
             unreadCount={chatUnreadCounts[firebaseService.getChatId(currentUser.id, peer.id)] || 0}
+            setIsChatRecording={setIsChatRecording}
             onNavigate={onNavigate}
+            onSetTtsMessage={onSetTtsMessage}
             onBlockUser={onBlockUser}
           />
         ))}
@@ -71,7 +77,9 @@ const ChatManager: React.FC<ChatManagerProps> = ({
             onHeaderClick={onMinimizeToggle}
             isMinimized={false}
             unreadCount={0}
+            setIsChatRecording={setIsChatRecording}
             onNavigate={onNavigate}
+            onSetTtsMessage={onSetTtsMessage}
             onBlockUser={onBlockUser}
           />
         ))}
@@ -88,7 +96,9 @@ const ChatManager: React.FC<ChatManagerProps> = ({
                 onHeaderClick={onMinimizeToggle}
                 isMinimized={minimizedChats.has(peer.id)}
                 unreadCount={chatUnreadCounts[firebaseService.getChatId(currentUser.id, peer.id)] || 0}
+                setIsChatRecording={setIsChatRecording}
                 onNavigate={onNavigate}
+                onSetTtsMessage={onSetTtsMessage}
                 onBlockUser={onBlockUser}
             />
          ))}
