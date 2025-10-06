@@ -1533,10 +1533,6 @@ const UserApp: React.FC = () => {
             activeView={currentView.view}
             voiceState={voiceState}
             onMicClick={handleMicClick}
-            onSendCommand={handleCommand}
-            commandInputValue={commandInputValue}
-            setCommandInputValue={setCommandInputValue}
-            ttsMessage={ttsMessage}
             isChatRecording={isChatRecording}
         />
       )}
